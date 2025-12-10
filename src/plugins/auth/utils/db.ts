@@ -1,40 +1,78 @@
 /**
- * Database utilities using Bun's built-in SQL client
+ * Database utilities using PostgreSQL client compatible with Bun
+ * Uses postgres.js which is optimized for Bun runtime
  */
 
 /**
  * PostgreSQL database connection wrapper
- * Note: This is a placeholder implementation for the interface
- * In production, you would use a proper PostgreSQL client like pg or postgres
+ * 
+ * @example
+ * ```typescript
+ * const db = new DatabaseConnection(process.env.DATABASE_URL!);
+ * const users = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+ * ```
  */
 export class DatabaseConnection {
-  constructor(_connectionString: string) {
-    // Store connection string for future use when implementing actual DB connection
+  private connectionUrl: string;
+  private postgresClient: any = null;
+
+  constructor(connectionString: string) {
+    this.connectionUrl = connectionString;
   }
 
   /**
-   * Execute a query
+   * Get or create PostgreSQL client
+   * Uses dynamic import to load postgres package
    */
-  async query<T = any>(_sql: string, _params?: any[]): Promise<T[]> {
-    // This is a simplified implementation
-    // In production, you would use a proper PostgreSQL client
-    // For now, we'll provide the interface that services will use
-    throw new Error('Database connection not implemented - use production PostgreSQL client');
+  private async getClient() {
+    if (!this.postgresClient) {
+      try {
+        // Import postgres package (postgres.js compatible with Bun)
+        const postgres = (await import('postgres')).default;
+        this.postgresClient = postgres(this.connectionUrl);
+      } catch (error) {
+        throw new Error(
+          'PostgreSQL client not found. Please install: bun add postgres\n' +
+          'Error: ' + (error as Error).message
+        );
+      }
+    }
+    return this.postgresClient;
+  }
+
+  /**
+   * Execute a query and return all rows
+   */
+  async query<T = any>(sqlQuery: string, params?: any[]): Promise<T[]> {
+    try {
+      const sql = await this.getClient();
+      
+      // postgres.js uses $1, $2 syntax natively
+      const result = await sql.unsafe(sqlQuery, params || []);
+      return result as T[];
+    } catch (error) {
+      throw new Error(`Database query failed: ${(error as Error).message}`);
+    }
   }
 
   /**
    * Execute a query and return a single row
    */
-  async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
-    const results = await this.query<T>(sql, params);
+  async queryOne<T = any>(sqlQuery: string, params?: any[]): Promise<T | null> {
+    const results = await this.query<T>(sqlQuery, params);
     return results[0] || null;
   }
 
   /**
    * Execute a query that doesn't return rows (INSERT, UPDATE, DELETE)
    */
-  async execute(sql: string, params?: any[]): Promise<void> {
-    await this.query(sql, params);
+  async execute(sqlQuery: string, params?: any[]): Promise<void> {
+    try {
+      const sql = await this.getClient();
+      await sql.unsafe(sqlQuery, params || []);
+    } catch (error) {
+      throw new Error(`Database execute failed: ${(error as Error).message}`);
+    }
   }
 
   /**
@@ -56,7 +94,9 @@ export class DatabaseConnection {
    * Close the connection
    */
   async close(): Promise<void> {
-    // Close connection pool
+    if (this.postgresClient) {
+      await this.postgresClient.end();
+    }
   }
 }
 
