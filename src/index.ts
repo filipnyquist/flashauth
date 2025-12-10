@@ -61,3 +61,17 @@ export { generateSecret } from './core/cryptography.js';
 
 // PASETO utilities (for advanced usage)
 export { base64urlEncode, base64urlDecode } from './core/paseto.js';
+
+// Authentication plugin (user management with email/password, 2FA, passkeys)
+export {
+  flashAuthPlugin,
+  runMigrations,
+  type AuthPluginConfig,
+  type User,
+  type UserPublic,
+  type CreateUserInput,
+  type EmailVerificationToken,
+  type PasswordResetToken,
+  type TOTPSecret,
+  type PasskeyCredential,
+} from './plugins/auth/index.js';
