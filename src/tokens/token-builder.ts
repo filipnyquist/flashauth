@@ -117,9 +117,9 @@ export class TokenBuilder {
   }
 
   /**
-   * Build the token
+   * Build the token (async)
    */
-  build(): string {
+  async build(): Promise<string> {
     // Validate required claims
     if (!this.claims.sub) {
       throw new ValidationError('Subject (sub) is required');
@@ -138,8 +138,8 @@ export class TokenBuilder {
       );
     }
 
-    // Create token
-    return createToken(this.claims as StandardClaims, this.key, this.footerValue);
+    // Create token (async)
+    return await createToken(this.claims as StandardClaims, this.key, this.footerValue);
   }
 
   /**

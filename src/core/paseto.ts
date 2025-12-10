@@ -33,21 +33,26 @@ export function base64urlDecode(str: string): Uint8Array {
 }
 
 /**
- * Create a PASETO v4 local token
+ * Create a PASETO v4 local token (async)
+ * 
+ * @param claims - Token claims (must include sub and exp)
+ * @param key - 32-byte encryption key
+ * @param footer - Optional footer (authenticated but not encrypted)
+ * @returns PASETO v4.local token string
  */
-export function createToken(
+export async function createToken(
   claims: StandardClaims,
   key: Uint8Array,
   footer?: string
-): string {
+): Promise<string> {
   // Serialize claims to JSON
   const message = new TextEncoder().encode(JSON.stringify(claims));
   
   // Encode footer if provided
   const footerBytes = footer ? new TextEncoder().encode(footer) : new Uint8Array(0);
   
-  // Encrypt message
-  const encrypted = encryptLocal(message, key, footerBytes);
+  // Encrypt message (async)
+  const encrypted = await encryptLocal(message, key, footerBytes);
   
   // Encode encrypted data
   const payload = base64urlEncode(encrypted);
@@ -63,12 +68,17 @@ export function createToken(
 }
 
 /**
- * Parse and validate a PASETO v4 local token
+ * Parse and validate a PASETO v4 local token (async)
+ * 
+ * @param token - PASETO v4.local token string
+ * @param key - 32-byte decryption key
+ * @returns Parsed claims and footer (if present)
+ * @throws TokenInvalidError if token format is invalid or decryption fails
  */
-export function parseToken(
+export async function parseToken(
   token: string,
   key: Uint8Array
-): { claims: StandardClaims; footer?: string } {
+): Promise<{ claims: StandardClaims; footer?: string }> {
   // Validate token format
   if (!token.startsWith(PASETO_V4_LOCAL_HEADER)) {
     throw new TokenInvalidError('Invalid token format: must start with v4.local.');
@@ -96,8 +106,8 @@ export function parseToken(
     const encrypted = base64urlDecode(payloadStr);
     const footerBytes = footerStr ? base64urlDecode(footerStr) : new Uint8Array(0);
     
-    // Decrypt message
-    const decrypted = decryptLocal(encrypted, key, footerBytes);
+    // Decrypt message (async)
+    const decrypted = await decryptLocal(encrypted, key, footerBytes);
     
     // Parse claims from JSON
     const claimsJson = new TextDecoder().decode(decrypted);

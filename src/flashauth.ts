@@ -106,7 +106,7 @@ export class FlashAuth {
   }
 
   /**
-   * Validate and parse a token
+   * Validate and parse a token (async)
    */
   async validateToken(token: string, options: ValidationOptions = {}): Promise<Claims> {
     // Check cache first for faster parsing
@@ -116,8 +116,8 @@ export class FlashAuth {
     if (cached) {
       claims = cached as Claims;
     } else {
-      // Parse token
-      claims = this.parser.parse(token, options);
+      // Parse token (async)
+      claims = await this.parser.parse(token, options);
       
       // Cache validated token (before revocation check for performance)
       if (this.tokenCache) {

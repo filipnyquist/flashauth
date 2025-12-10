@@ -38,8 +38,8 @@ const app = new Elysia()
     const email = body.email;
     const roles = ['user'];
     
-    // Create token
-    const token = auth
+    // Create token (async)
+    const token = await auth
       .createToken()
       .subject(userId)
       .claim('email', email)

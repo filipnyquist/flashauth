@@ -18,11 +18,11 @@ export class TokenParser {
   }
 
   /**
-   * Parse and validate a token
+   * Parse and validate a token (async)
    */
-  parse(token: string, options: ValidationOptions = {}): Claims {
-    // Parse token
-    const { claims: rawClaims } = parseToken(token, this.key);
+  async parse(token: string, options: ValidationOptions = {}): Promise<Claims> {
+    // Parse token (async)
+    const { claims: rawClaims } = await parseToken(token, this.key);
     
     // Create Claims instance
     const claims = new Claims(rawClaims);
@@ -34,11 +34,11 @@ export class TokenParser {
   }
 
   /**
-   * Parse token without validation
+   * Parse token without validation (async)
    * Useful for inspecting token contents
    */
-  parseUnsafe(token: string): StandardClaims {
-    const { claims } = parseToken(token, this.key);
+  async parseUnsafe(token: string): Promise<StandardClaims> {
+    const { claims } = await parseToken(token, this.key);
     return claims;
   }
 }

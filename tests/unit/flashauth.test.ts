@@ -25,7 +25,7 @@ describe('FlashAuth', () => {
       secret: FlashAuth.generateSecret(),
     });
 
-    const token = auth
+    const token = await auth
       .createToken()
       .subject('user:123')
       .claim('email', 'user@example.com')
@@ -46,7 +46,7 @@ describe('FlashAuth', () => {
       },
     });
 
-    const token = auth
+    const token = await auth
       .createToken()
       .subject('user:123')
       .roles(['user'])
@@ -66,7 +66,7 @@ describe('FlashAuth', () => {
       },
     });
 
-    const token = auth
+    const token = await auth
       .createToken()
       .subject('user:123')
       .roles(['user'])
@@ -84,7 +84,7 @@ describe('FlashAuth', () => {
       secret: FlashAuth.generateSecret(),
     });
 
-    const token = auth
+    const token = await auth
       .createToken()
       .subject('user:123')
       .issuer('test-issuer')
@@ -105,7 +105,7 @@ describe('FlashAuth', () => {
       secret: FlashAuth.generateSecret(),
     });
 
-    const token = auth
+    const token = await auth
       .createToken()
       .subject('user:123')
       .issuer('wrong-issuer')
@@ -125,7 +125,7 @@ describe('FlashAuth', () => {
     const jti = 'token-id-123';
     const exp = Math.floor(Date.now() / 1000) + 3600;
 
-    const token = auth
+    const token = await auth
       .createToken()
       .subject('user:123')
       .tokenId(jti)
@@ -148,7 +148,7 @@ describe('FlashAuth', () => {
       secret: FlashAuth.generateSecret(),
     });
 
-    const token = auth
+    const token = await auth
       .createToken()
       .subject('user:123')
       .expiresIn('1h')

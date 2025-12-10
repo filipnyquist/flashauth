@@ -8,7 +8,7 @@ import { generateSecret } from '../../src/core/cryptography.js';
 import type { StandardClaims } from '../../src/core/claims.js';
 
 describe('PASETO v4 Local', () => {
-  test('should create and parse a token', () => {
+  test('should create and parse a token', async () => {
     const key = generateSecret();
     const claims: StandardClaims = {
       sub: 'user:123',
@@ -16,16 +16,16 @@ describe('PASETO v4 Local', () => {
       iat: Math.floor(Date.now() / 1000),
     };
 
-    const token = createToken(claims, key);
+    const token = await createToken(claims, key);
     expect(token).toStartWith('v4.local.');
 
-    const parsed = parseToken(token, key);
+    const parsed = await parseToken(token, key);
     expect(parsed.claims.sub).toBe(claims.sub);
     expect(parsed.claims.exp).toBe(claims.exp);
     expect(parsed.claims.iat).toBe(claims.iat);
   });
 
-  test('should create token with footer', () => {
+  test('should create token with footer', async () => {
     const key = generateSecret();
     const claims: StandardClaims = {
       sub: 'user:123',
@@ -34,16 +34,16 @@ describe('PASETO v4 Local', () => {
     };
     const footer = 'test-footer';
 
-    const token = createToken(claims, key, footer);
+    const token = await createToken(claims, key, footer);
     expect(token).toStartWith('v4.local.');
     expect(token.split('.').length).toBe(4);
 
-    const parsed = parseToken(token, key);
+    const parsed = await parseToken(token, key);
     expect(parsed.claims.sub).toBe(claims.sub);
     expect(parsed.footer).toBe(footer);
   });
 
-  test('should fail with wrong key', () => {
+  test('should fail with wrong key', async () => {
     const key1 = generateSecret();
     const key2 = generateSecret();
     const claims: StandardClaims = {
@@ -52,19 +52,19 @@ describe('PASETO v4 Local', () => {
       iat: Math.floor(Date.now() / 1000),
     };
 
-    const token = createToken(claims, key1);
+    const token = await createToken(claims, key1);
     
-    expect(() => parseToken(token, key2)).toThrow();
+    await expect(parseToken(token, key2)).rejects.toThrow();
   });
 
-  test('should fail with invalid token format', () => {
+  test('should fail with invalid token format', async () => {
     const key = generateSecret();
     
-    expect(() => parseToken('invalid', key)).toThrow('Invalid token format');
-    expect(() => parseToken('v4.public.test', key)).toThrow('Invalid token format');
+    await expect(parseToken('invalid', key)).rejects.toThrow('Invalid token format');
+    await expect(parseToken('v4.public.test', key)).rejects.toThrow('Invalid token format');
   });
 
-  test('should handle custom claims', () => {
+  test('should handle custom claims', async () => {
     const key = generateSecret();
     const claims: StandardClaims = {
       sub: 'user:123',
@@ -74,8 +74,8 @@ describe('PASETO v4 Local', () => {
       roles: ['user', 'admin'],
     };
 
-    const token = createToken(claims, key);
-    const parsed = parseToken(token, key);
+    const token = await createToken(claims, key);
+    const parsed = await parseToken(token, key);
     
     expect(parsed.claims.email).toBe(claims.email);
     expect(parsed.claims.roles).toEqual(claims.roles);
