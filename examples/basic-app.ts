@@ -4,7 +4,7 @@
  */
 
 import { Elysia, t } from 'elysia';
-import { FlashAuth, flashAuth, requireAuth, requirePermission } from '../src/index.js';
+import { FlashAuth, flashAuth } from '../src/index.js';
 
 // Initialize FlashAuth
 const auth = new FlashAuth({
@@ -59,26 +59,27 @@ const app = new Elysia()
   })
   
   // Protected route - requires authentication
-  .use(requireAuth())
   .get('/profile', ({ flashAuth }) => ({
     userId: flashAuth.claims?.sub,
     email: flashAuth.claims?.email,
     roles: flashAuth.claims?.roles,
     permissions: flashAuth.claims?.perms,
-  }))
+  }), {
+    isAuth: true
+  })
   
   // Protected route - requires posts:read permission
-  .use(requirePermission('posts:read'))
   .get('/posts', ({ flashAuth }) => ({
     posts: [
       { id: 1, title: 'First Post', author: 'user:123' },
       { id: 2, title: 'Second Post', author: 'user:456' },
     ],
     user: flashAuth.claims?.sub,
-  }))
+  }), {
+    requirePermission: 'posts:read'
+  })
   
   // Protected route - requires posts:write permission
-  .use(requirePermission('posts:write'))
   .post('/posts', ({ flashAuth, body }) => ({
     id: 3,
     title: body.title,
@@ -90,6 +91,7 @@ const app = new Elysia()
       title: t.String({ minLength: 1 }),
       content: t.String({ minLength: 1 }),
     }),
+    requirePermission: 'posts:write'
   })
   
   // Error handler
