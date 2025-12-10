@@ -431,7 +431,7 @@ app.use(requirePermission('posts:delete'))
 
 FlashAuth is designed for high performance:
 
-- **Token Creation**: Synchronous, <1ms on modern hardware
+- **Token Creation**: Asynchronous, <1ms on modern hardware
 - **Token Validation**: Cached tokens return instantly
 - **Permission Checks**: O(1) for exact match, O(n) for wildcard
 - **Memory**: <5MB for typical deployments with 10k cached tokens
