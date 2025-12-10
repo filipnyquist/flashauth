@@ -44,7 +44,9 @@ export class InMemoryRevocationStore implements RevocationStore {
   constructor() {
     // Auto-cleanup every 5 minutes
     this.cleanupInterval = setInterval(() => {
-      this.cleanup();
+      this.cleanup().catch((err) => {
+        console.error('Cleanup failed:', err);
+      });
     }, 5 * 60 * 1000);
   }
 
