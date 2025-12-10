@@ -38,6 +38,7 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "benchmark": "bun run benchmarks/token-operations.ts",
+    "benchmark:server": "bun run benchmarks/benchmark-server.ts",
     "dev": "bun run --watch examples/basic-app.ts",
     "lint": "tsc --noEmit"
   },
