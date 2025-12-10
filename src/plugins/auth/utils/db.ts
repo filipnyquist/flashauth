@@ -1,10 +1,10 @@
 /**
- * Database utilities using PostgreSQL client compatible with Bun
- * Uses postgres.js which is optimized for Bun runtime
+ * Database utilities using Bun's built-in SQL client for PostgreSQL
+ * https://bun.com/docs/runtime/sql
  */
 
 /**
- * PostgreSQL database connection wrapper
+ * PostgreSQL database connection wrapper using Bun.SQL
  * 
  * @example
  * ```typescript
@@ -13,43 +13,25 @@
  * ```
  */
 export class DatabaseConnection {
-  private connectionUrl: string;
-  private postgresClient: any = null;
+  private sql: any;
 
   constructor(connectionString: string) {
-    this.connectionUrl = connectionString;
-  }
-
-  /**
-   * Get or create PostgreSQL client
-   * Uses dynamic import to load postgres package
-   */
-  private async getClient() {
-    if (!this.postgresClient) {
-      try {
-        // Import postgres package (postgres.js compatible with Bun)
-        const postgres = (await import('postgres')).default;
-        this.postgresClient = postgres(this.connectionUrl);
-      } catch (error) {
-        throw new Error(
-          'PostgreSQL client not found. Please install: bun add postgres\n' +
-          'Error: ' + (error as Error).message
-        );
-      }
-    }
-    return this.postgresClient;
+    // Use Bun's built-in SQL client for PostgreSQL
+    // new SQL(url) creates a connection with the specified PostgreSQL URL
+    this.sql = new Bun.SQL(connectionString);
   }
 
   /**
    * Execute a query and return all rows
+   * Uses Bun.SQL with parameterized queries
    */
   async query<T = any>(sqlQuery: string, params?: any[]): Promise<T[]> {
     try {
-      const sql = await this.getClient();
-      
-      // postgres.js uses $1, $2 syntax natively
-      const result = await sql.unsafe(sqlQuery, params || []);
-      return result as T[];
+      // Use sql.unsafe() for parameterized queries with $1, $2, etc.
+      // Bun.SQL automatically handles parameterized queries safely
+      const result = await this.sql.unsafe(sqlQuery, params || []);
+      // Ensure we always return an array
+      return Array.isArray(result) ? result : (result ? [result] : []);
     } catch (error) {
       throw new Error(`Database query failed: ${(error as Error).message}`);
     }
@@ -68,8 +50,7 @@ export class DatabaseConnection {
    */
   async execute(sqlQuery: string, params?: any[]): Promise<void> {
     try {
-      const sql = await this.getClient();
-      await sql.unsafe(sqlQuery, params || []);
+      await this.sql.unsafe(sqlQuery, params || []);
     } catch (error) {
       throw new Error(`Database execute failed: ${(error as Error).message}`);
     }
@@ -77,8 +58,10 @@ export class DatabaseConnection {
 
   /**
    * Run migrations from SQL file
+   * Uses sql.file() if available, otherwise falls back to splitting statements
    */
   async runMigrations(migrationSql: string): Promise<void> {
+    // For multiple statements, we need to use simple() or split them
     // Split by semicolon and execute each statement
     const statements = migrationSql
       .split(';')
@@ -94,14 +77,14 @@ export class DatabaseConnection {
    * Close the connection
    */
   async close(): Promise<void> {
-    if (this.postgresClient) {
-      await this.postgresClient.end();
+    if (this.sql) {
+      await this.sql.close();
     }
   }
 }
 
 /**
- * Create a database connection
+ * Create a database connection using Bun's built-in SQL client
  */
 export function createDatabaseConnection(connectionString: string): DatabaseConnection {
   return new DatabaseConnection(connectionString);

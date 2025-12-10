@@ -4,12 +4,12 @@ Complete user authentication plugin for FlashAuth with email/password signup, em
 
 ## Features
 
-- ✅ **Email/Password Authentication** - User signup and login with Bun's native password hashing
+- ✅ **Email/Password Authentication** - User signup and login with Bun's native Argon2id hashing
 - ✅ **Email Verification** - Secure email verification flow with time-limited tokens
 - ✅ **Password Reset** - Secure password reset flow with time-limited tokens
 - ✅ **TOTP 2FA** - Time-based One-Time Password two-factor authentication using otplib
 - ✅ **Passkey/WebAuthn** - Passwordless authentication using @simplewebauthn/server
-- ✅ **PostgreSQL Storage** - Database schema for users, tokens, and credentials
+- ✅ **PostgreSQL Storage** - Uses Bun's built-in SQL client (Bun.SQL) for PostgreSQL
 - ✅ **Type-Safe** - Full TypeScript support
 - ✅ **Elysia Plugin** - First-class integration with Elysia.js
 
@@ -18,6 +18,8 @@ Complete user authentication plugin for FlashAuth with email/password signup, em
 ```bash
 bun add flashauth otplib @simplewebauthn/server
 ```
+
+**Note:** No additional PostgreSQL client needed! Bun has built-in PostgreSQL support via `Bun.SQL`.
 
 ## Quick Start
 
