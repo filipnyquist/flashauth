@@ -83,7 +83,7 @@ export function flashAuth(
         }
       } catch (error) {
         // Token validation failed - leave claims as null
-        // Don't throw here, let guards handle authentication
+        // Don't throw here, let macros handle authentication
       }
 
       return {
@@ -112,89 +112,131 @@ export function flashAuth(
           },
         },
       };
-    });
+    })
+    .macro(({ onBeforeHandle }) => ({
+      /**
+       * Require authentication for this route
+       * @example
+       * .get('/profile', ({ flashAuth }) => flashAuth.claims, {
+       *   isAuth: true
+       * })
+       */
+      isAuth(enabled: boolean) {
+        if (!enabled) return;
+        
+        onBeforeHandle(({ flashAuth }: any) => {
+          if (!flashAuth || !flashAuth.claims) {
+            throw new TokenError('Authentication required');
+          }
+        });
+      },
+      
+      /**
+       * Require specific permission for this route
+       * @example
+       * .get('/posts', () => getPosts(), {
+       *   requirePermission: 'posts:read'
+       * })
+       */
+      requirePermission(permission: string | false) {
+        if (!permission) return;
+        
+        onBeforeHandle(({ flashAuth }: any) => {
+          if (!flashAuth || !flashAuth.claims) {
+            throw new TokenError('Authentication required');
+          }
+          if (!flashAuth.hasPermission(permission)) {
+            throw new PermissionError(`Requires '${permission}' permission`);
+          }
+        });
+      },
+      
+      /**
+       * Require any of multiple permissions for this route
+       * @example
+       * .delete('/posts/:id', () => deletePost(), {
+       *   requireAnyPermission: ['posts:delete', 'admin:*']
+       * })
+       */
+      requireAnyPermission(permissions: string[] | false) {
+        if (!permissions) return;
+        
+        onBeforeHandle(({ flashAuth }: any) => {
+          if (!flashAuth || !flashAuth.claims) {
+            throw new TokenError('Authentication required');
+          }
+          if (!flashAuth.hasAnyPermission(permissions)) {
+            throw new PermissionError(
+              `Requires one of: ${permissions.join(', ')}`
+            );
+          }
+        });
+      },
+      
+      /**
+       * Require all of multiple permissions for this route
+       * @example
+       * .get('/dashboard', () => getDashboard(), {
+       *   requireAllPermissions: ['users:read', 'posts:write']
+       * })
+       */
+      requireAllPermissions(permissions: string[] | false) {
+        if (!permissions) return;
+        
+        onBeforeHandle(({ flashAuth }: any) => {
+          if (!flashAuth || !flashAuth.claims) {
+            throw new TokenError('Authentication required');
+          }
+          if (!flashAuth.hasAllPermissions(permissions)) {
+            throw new PermissionError(
+              `Requires all of: ${permissions.join(', ')}`
+            );
+          }
+        });
+      },
+      
+      /**
+       * Require specific role for this route
+       * @example
+       * .get('/admin', () => getAdminPanel(), {
+       *   requireRole: 'admin'
+       * })
+       */
+      requireRole(role: string | false) {
+        if (!role) return;
+        
+        onBeforeHandle(({ flashAuth }: any) => {
+          if (!flashAuth || !flashAuth.claims) {
+            throw new TokenError('Authentication required');
+          }
+          if (!flashAuth.hasRole(role)) {
+            throw new PermissionError(`Requires '${role}' role`);
+          }
+        });
+      },
+      
+      /**
+       * Require any of multiple roles for this route
+       * @example
+       * .get('/moderation', () => getModerationPanel(), {
+       *   requireAnyRole: ['admin', 'moderator']
+       * })
+       */
+      requireAnyRole(roles: string[] | false) {
+        if (!roles) return;
+        
+        onBeforeHandle(({ flashAuth }: any) => {
+          if (!flashAuth || !flashAuth.claims) {
+            throw new TokenError('Authentication required');
+          }
+          if (!flashAuth.hasAnyRole(roles)) {
+            throw new PermissionError(
+              `Requires one of: ${roles.join(', ')}`
+            );
+          }
+        });
+      },
+    }))
+    .as('plugin' as any);
 }
-
-/**
- * Guard: Require authentication
- */
-export const requireAuth = () =>
-  new Elysia({ name: 'require-auth' })
-    .derive((context: any) => {
-      if (!context.flashAuth || !context.flashAuth.claims) {
-        throw new TokenError('Authentication required');
-      }
-      return {};
-    });
-
-/**
- * Guard: Require specific permission
- */
-export const requirePermission = (permission: string) =>
-  new Elysia({ name: `require-permission:${permission}` })
-    .use(requireAuth())
-    .derive((context: any) => {
-      if (!context.flashAuth.hasPermission(permission)) {
-        throw new PermissionError(`Requires '${permission}' permission`);
-      }
-      return {};
-    });
-
-/**
- * Guard: Require any of multiple permissions
- */
-export const requireAnyPermission = (permissions: string[]) =>
-  new Elysia({ name: `require-any-permission:${permissions.join(',')}` })
-    .use(requireAuth())
-    .derive((context: any) => {
-      if (!context.flashAuth.hasAnyPermission(permissions)) {
-        throw new PermissionError(
-          `Requires one of: ${permissions.join(', ')}`
-        );
-      }
-      return {};
-    });
-
-/**
- * Guard: Require all of multiple permissions
- */
-export const requireAllPermissions = (permissions: string[]) =>
-  new Elysia({ name: `require-all-permissions:${permissions.join(',')}` })
-    .use(requireAuth())
-    .derive((context: any) => {
-      if (!context.flashAuth.hasAllPermissions(permissions)) {
-        throw new PermissionError(
-          `Requires all of: ${permissions.join(', ')}`
-        );
-      }
-      return {};
-    });
-
-/**
- * Guard: Require specific role
- */
-export const requireRole = (role: string) =>
-  new Elysia({ name: `require-role:${role}` })
-    .use(requireAuth())
-    .derive((context: any) => {
-      if (!context.flashAuth.hasRole(role)) {
-        throw new PermissionError(`Requires '${role}' role`);
-      }
-      return {};
-    });
-
-/**
- * Guard: Require any of multiple roles
- */
-export const requireAnyRole = (roles: string[]) =>
-  new Elysia({ name: `require-any-role:${roles.join(',')}` })
-    .use(requireAuth())
-    .derive((context: any) => {
-      if (!context.flashAuth.hasAnyRole(roles)) {
-        throw new PermissionError(
-          `Requires one of: ${roles.join(', ')}`
-        );
-      }
-      return {};
-    });
 

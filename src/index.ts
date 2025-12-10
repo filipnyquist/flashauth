@@ -21,12 +21,6 @@ export type { RevocationStore } from './tokens/token-store.js';
 // Elysia plugin
 export {
   flashAuth,
-  requireAuth,
-  requirePermission,
-  requireAnyPermission,
-  requireAllPermissions,
-  requireRole,
-  requireAnyRole,
 } from './plugins/elysia-plugin.js';
 export type { FlashAuthPluginConfig, FlashAuthContext } from './plugins/elysia-plugin.js';
 
