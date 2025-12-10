@@ -120,7 +120,7 @@ export function flashAuth(
  */
 export const requireAuth = () =>
   new Elysia({ name: 'require-auth' })
-    .derive((context: any) => {
+    .derive((context: FlashAuthContext) => {
       if (!context.flashAuth || !context.flashAuth.claims) {
         throw new TokenError('Authentication required');
       }
@@ -133,7 +133,7 @@ export const requireAuth = () =>
 export const requirePermission = (permission: string) =>
   new Elysia({ name: `require-permission:${permission}` })
     .use(requireAuth())
-    .derive((context: any) => {
+    .derive((context: FlashAuthContext) => {
       if (!context.flashAuth.hasPermission(permission)) {
         throw new PermissionError(`Requires '${permission}' permission`);
       }
@@ -146,7 +146,7 @@ export const requirePermission = (permission: string) =>
 export const requireAnyPermission = (permissions: string[]) =>
   new Elysia({ name: `require-any-permission:${permissions.join(',')}` })
     .use(requireAuth())
-    .derive((context: any) => {
+    .derive((context: FlashAuthContext) => {
       if (!context.flashAuth.hasAnyPermission(permissions)) {
         throw new PermissionError(
           `Requires one of: ${permissions.join(', ')}`
@@ -161,7 +161,7 @@ export const requireAnyPermission = (permissions: string[]) =>
 export const requireAllPermissions = (permissions: string[]) =>
   new Elysia({ name: `require-all-permissions:${permissions.join(',')}` })
     .use(requireAuth())
-    .derive((context: any) => {
+    .derive((context: FlashAuthContext) => {
       if (!context.flashAuth.hasAllPermissions(permissions)) {
         throw new PermissionError(
           `Requires all of: ${permissions.join(', ')}`
@@ -176,7 +176,7 @@ export const requireAllPermissions = (permissions: string[]) =>
 export const requireRole = (role: string) =>
   new Elysia({ name: `require-role:${role}` })
     .use(requireAuth())
-    .derive((context: any) => {
+    .derive((context: FlashAuthContext) => {
       if (!context.flashAuth.hasRole(role)) {
         throw new PermissionError(`Requires '${role}' role`);
       }
@@ -189,7 +189,7 @@ export const requireRole = (role: string) =>
 export const requireAnyRole = (roles: string[]) =>
   new Elysia({ name: `require-any-role:${roles.join(',')}` })
     .use(requireAuth())
-    .derive((context: any) => {
+    .derive((context: FlashAuthContext) => {
       if (!context.flashAuth.hasAnyRole(roles)) {
         throw new PermissionError(
           `Requires one of: ${roles.join(', ')}`

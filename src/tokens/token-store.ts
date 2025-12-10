@@ -5,6 +5,8 @@
 
 /**
  * Token revocation store interface
+ * All methods are async to support pluggable implementations (Redis, PostgreSQL, etc.)
+ * even though the in-memory implementation is synchronous
  */
 export interface RevocationStore {
   /**
@@ -35,6 +37,8 @@ export interface RevocationStore {
 
 /**
  * In-memory revocation store
+ * Uses synchronous Map/Set operations wrapped in async for interface compliance
+ * Allows for future database-backed implementations without API changes
  */
 export class InMemoryRevocationStore implements RevocationStore {
   private revokedTokens: Map<string, number> = new Map();

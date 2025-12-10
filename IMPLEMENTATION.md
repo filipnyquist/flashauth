@@ -167,7 +167,7 @@ const auth = new FlashAuth({
 const app = new Elysia()
   .use(flashAuth(auth))
   .post('/login', async ({ body }) => {
-    const token = auth
+    const token = await auth
       .createToken()
       .subject('user:123')
       .roles(['user'])

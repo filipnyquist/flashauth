@@ -50,7 +50,7 @@ const app = new Elysia()
   // Public login endpoint
   .post('/login', async ({ body }) => {
     // Validate credentials...
-    const token = auth
+    const token = await auth
       .createToken()
       .subject('user:123')
       .claim('email', body.email)
@@ -147,7 +147,7 @@ const auth = new FlashAuth({
 
 ```typescript
 // Fluent API
-const token = auth
+const token = await auth
   .createToken()
   .subject('user:123')
   .issuer('my-app')
@@ -161,7 +161,7 @@ const token = auth
   .build();
 
 // Direct
-const token = auth.createToken({
+const token = await auth.createToken({
   sub: 'user:123',
   exp: Math.floor(Date.now() / 1000) + 3600,
   roles: ['user'],
@@ -306,7 +306,7 @@ const auth = new FlashAuth({
 });
 
 // Permissions are automatically expanded from roles
-const token = auth
+const token = await auth
   .createToken()
   .subject('user:123')
   .roles(['user', 'moderator'])
@@ -319,7 +319,7 @@ const token = auth
 ### Custom Claims
 
 ```typescript
-const token = auth
+const token = await auth
   .createToken()
   .subject('user:123')
   .claim('email', 'user@example.com')
