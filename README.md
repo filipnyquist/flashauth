@@ -393,19 +393,20 @@ const auth = new FlashAuth({
 
 ```typescript
 // Short-lived access tokens
-const accessToken = auth
+const accessToken = await auth
   .createToken()
   .subject(userId)
   .expiresIn('15m')
   .build();
 
 // Long-lived refresh tokens (store separately)
-const refreshToken = auth
+const refreshToken = await auth
   .createToken()
   .subject(userId)
   .claim('purpose', 'refresh')
   .expiresIn('30d')
   .build();
+// Note: This code must be inside an async function or top-level for-await context.
 ```
 
 ### Permission Validation
