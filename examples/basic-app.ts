@@ -2,8 +2,8 @@
  * FlashAuth Basic Example
  * Demonstrates basic token creation and validation
  * 
- * Note: This example requires a database. For production, use a real PostgreSQL connection.
- * For testing, you can use an in-memory SQLite database or a test PostgreSQL instance.
+ * Note: This example requires a PostgreSQL database connection.
+ * Set the DATABASE_URL environment variable to your PostgreSQL connection string.
  */
 
 import { Elysia, t } from 'elysia';
