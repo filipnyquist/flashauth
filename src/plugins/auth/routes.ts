@@ -25,6 +25,14 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
   return new Elysia({ prefix: '/auth' })
     // Signup
     .post('/signup', async ({ body }) => {
+      // Check if signups are disabled
+      if (config.disableSignup) {
+        return {
+          success: false,
+          error: 'Signups are currently disabled',
+        };
+      }
+
       const user = await userService.createUser({
         email: body.email,
         password: body.password,
@@ -333,6 +341,13 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Passkey registration start
     .post('/passkey/register/start', async ({ headers }) => {
+      if (!config.webauthn.enabled) {
+        return {
+          success: false,
+          error: 'Passkey authentication is not enabled',
+        };
+      }
+
       const authHeader = headers.authorization;
       if (!authHeader) {
         return {
@@ -366,6 +381,13 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Passkey registration finish
     .post('/passkey/register/finish', async ({ body, headers }) => {
+      if (!config.webauthn.enabled) {
+        return {
+          success: false,
+          error: 'Passkey authentication is not enabled',
+        };
+      }
+
       const authHeader = headers.authorization;
       if (!authHeader) {
         return {
@@ -410,6 +432,13 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Passkey authentication start
     .post('/passkey/login/start', async () => {
+      if (!config.webauthn.enabled) {
+        return {
+          success: false,
+          error: 'Passkey authentication is not enabled',
+        };
+      }
+
       const options = await passkeyService.generateAuthenticationOptions();
 
       // Store challenge with a random session ID
@@ -425,6 +454,13 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Passkey authentication finish
     .post('/passkey/login/finish', async ({ body }) => {
+      if (!config.webauthn.enabled) {
+        return {
+          success: false,
+          error: 'Passkey authentication is not enabled',
+        };
+      }
+
       const expectedChallenge = challenges.get(body.sessionId);
       if (!expectedChallenge) {
         return {

@@ -1,10 +1,13 @@
 /**
  * FlashAuth Basic Example
  * Demonstrates basic token creation and validation
+ * 
+ * Note: This example requires a database. For production, use a real PostgreSQL connection.
+ * For testing, you can use an in-memory SQLite database or a test PostgreSQL instance.
  */
 
 import { Elysia, t } from 'elysia';
-import { FlashAuth, flashAuth } from '../src/index.js';
+import { FlashAuth, flashAuthPlugin } from '../src/index.js';
 
 // Initialize FlashAuth
 const auth = new FlashAuth({
@@ -18,7 +21,16 @@ const auth = new FlashAuth({
 
 // Create Elysia app
 const app = new Elysia()
-  .use(flashAuth(auth))
+  .use(flashAuthPlugin({
+    flashAuth: auth,
+    databaseUrl: process.env.DATABASE_URL || 'postgres://localhost:5432/flashauth',
+    webauthn: {
+      enabled: false, // Disable passkey features for this example
+      rpName: 'FlashAuth Basic',
+      rpID: 'localhost',
+      origin: 'http://localhost:3000',
+    },
+  }))
   
   // Public route
   .get('/', () => ({

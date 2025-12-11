@@ -15,9 +15,33 @@ export interface AuthPluginConfig {
   flashAuth: any; // Will be the FlashAuth instance
 
   /**
+   * Token location: 'bearer' for Authorization header, 'cookie' for cookies
+   * Default: 'bearer'
+   */
+  tokenLocation?: 'bearer' | 'cookie';
+
+  /**
+   * Cookie name (when tokenLocation is 'cookie')
+   * Default: 'auth_token'
+   */
+  cookieName?: string;
+
+  /**
+   * Cookie options
+   */
+  cookieSecure?: boolean;
+  cookieHttpOnly?: boolean;
+  cookieSameSite?: 'strict' | 'lax' | 'none';
+
+  /**
    * Relying Party (RP) configuration for WebAuthn/Passkey
    */
   webauthn: {
+    /**
+     * Enable/disable passkey authentication (default: false)
+     */
+    enabled?: boolean;
+
     /**
      * Human-readable name of the relying party (your app name)
      */
@@ -101,6 +125,12 @@ export interface AuthPluginConfig {
      */
     requireSpecialChar?: boolean;
   };
+
+  /**
+   * Disable user signups (default: false)
+   * When true, the /auth/signup endpoint will return an error
+   */
+  disableSignup?: boolean;
 }
 
 /**

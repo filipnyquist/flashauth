@@ -4,7 +4,7 @@
  */
 
 import { Elysia } from 'elysia';
-import { FlashAuth, flashAuth, flashAuthPlugin } from '../src/index.js';
+import { FlashAuth, flashAuthPlugin } from '../src/index.js';
 
 // Initialize FlashAuth
 const auth = new FlashAuth({
@@ -17,9 +17,6 @@ const auth = new FlashAuth({
 
 // Create Elysia app with authentication plugin
 const app = new Elysia()
-  // Add FlashAuth token plugin
-  .use(flashAuth(auth))
-  
   // Add authentication plugin with user management
   .use(flashAuthPlugin({
     // Database connection (using in-memory for example)
@@ -30,6 +27,7 @@ const app = new Elysia()
     
     // WebAuthn/Passkey configuration
     webauthn: {
+      enabled: true, // Enable passkey authentication
       rpName: 'FlashAuth Example',
       rpID: 'localhost',
       origin: 'http://localhost:3000',

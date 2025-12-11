@@ -240,3 +240,113 @@ export function flashAuth(
     .as('plugin' as any);
 }
 
+/**
+ * Elysia guard functions for route protection
+ * These can be used with .use() to protect routes
+ */
+
+/**
+ * Require authentication for routes
+ * @example
+ * app.use(requireAuth()).get('/profile', ({ flashAuth }) => flashAuth.claims)
+ */
+export function requireAuth() {
+  return new Elysia({ name: 'flashauth-require-auth' })
+    .derive(({ flashAuth }: any) => {
+      if (!flashAuth || !flashAuth.claims) {
+        throw new TokenError('Authentication required');
+      }
+      return {};
+    });
+}
+
+/**
+ * Require specific permission for routes
+ * @example
+ * app.use(requirePermission('posts:read')).get('/posts', () => getPosts())
+ */
+export function requirePermission(permission: string) {
+  return new Elysia({ name: 'flashauth-require-permission' })
+    .derive(({ flashAuth }: any) => {
+      if (!flashAuth || !flashAuth.claims) {
+        throw new TokenError('Authentication required');
+      }
+      if (!flashAuth.hasPermission(permission)) {
+        throw new PermissionError(`Requires '${permission}' permission`);
+      }
+      return {};
+    });
+}
+
+/**
+ * Require any of multiple permissions for routes
+ * @example
+ * app.use(requireAnyPermission(['posts:delete', 'admin:*'])).delete('/posts/:id', () => deletePost())
+ */
+export function requireAnyPermission(permissions: string[]) {
+  return new Elysia({ name: 'flashauth-require-any-permission' })
+    .derive(({ flashAuth }: any) => {
+      if (!flashAuth || !flashAuth.claims) {
+        throw new TokenError('Authentication required');
+      }
+      if (!flashAuth.hasAnyPermission(permissions)) {
+        throw new PermissionError(`Requires one of: ${permissions.join(', ')}`);
+      }
+      return {};
+    });
+}
+
+/**
+ * Require all of multiple permissions for routes
+ * @example
+ * app.use(requireAllPermissions(['users:read', 'posts:write'])).get('/dashboard', () => getDashboard())
+ */
+export function requireAllPermissions(permissions: string[]) {
+  return new Elysia({ name: 'flashauth-require-all-permissions' })
+    .derive(({ flashAuth }: any) => {
+      if (!flashAuth || !flashAuth.claims) {
+        throw new TokenError('Authentication required');
+      }
+      if (!flashAuth.hasAllPermissions(permissions)) {
+        throw new PermissionError(`Requires all of: ${permissions.join(', ')}`);
+      }
+      return {};
+    });
+}
+
+/**
+ * Require specific role for routes
+ * @example
+ * app.use(requireRole('admin')).get('/admin', () => getAdminPanel())
+ */
+export function requireRole(role: string) {
+  return new Elysia({ name: 'flashauth-require-role' })
+    .derive(({ flashAuth }: any) => {
+      if (!flashAuth || !flashAuth.claims) {
+        throw new TokenError('Authentication required');
+      }
+      if (!flashAuth.hasRole(role)) {
+        throw new PermissionError(`Requires '${role}' role`);
+      }
+      return {};
+    });
+}
+
+/**
+ * Require any of multiple roles for routes
+ * @example
+ * app.use(requireAnyRole(['admin', 'moderator'])).get('/moderation', () => getModerationPanel())
+ */
+export function requireAnyRole(roles: string[]) {
+  return new Elysia({ name: 'flashauth-require-any-role' })
+    .derive(({ flashAuth }: any) => {
+      if (!flashAuth || !flashAuth.claims) {
+        throw new TokenError('Authentication required');
+      }
+      if (!flashAuth.hasAnyRole(roles)) {
+        throw new PermissionError(`Requires one of: ${roles.join(', ')}`);
+      }
+      return {};
+    });
+}
+

@@ -57,7 +57,7 @@ export class TOTPService {
       'SELECT email FROM users WHERE id = $1',
       [userId]
     );
-    const appName = this.config.webauthn.rpName || 'FlashAuth';
+    const appName = this.config.webauthn?.rpName || 'FlashAuth';
     const userEmail = user?.email;
     if (!userEmail) {
       throw new Error('User email not found');

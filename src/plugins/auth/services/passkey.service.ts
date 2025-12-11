@@ -31,6 +31,10 @@ export class PasskeyService {
    * Generate registration options for a new passkey
    */
   async generateRegistrationOptions(userId: string, userName: string): Promise<any> {
+    if (!this.config.webauthn?.enabled) {
+      throw new Error('Passkey authentication is not enabled');
+    }
+
     // Get user's existing credentials to exclude them
     const existingCredentials = await this.getUserCredentials(userId);
 
@@ -62,6 +66,10 @@ export class PasskeyService {
     response: any,
     expectedChallenge: string
   ): Promise<{ verified: boolean; error?: string }> {
+    if (!this.config.webauthn?.enabled) {
+      throw new Error('Passkey authentication is not enabled');
+    }
+
     try {
       const opts: VerifyRegistrationResponseOpts = {
         response,
@@ -105,6 +113,10 @@ export class PasskeyService {
    * Generate authentication options for passkey login
    */
   async generateAuthenticationOptions(userId?: string): Promise<any> {
+    if (!this.config.webauthn?.enabled) {
+      throw new Error('Passkey authentication is not enabled');
+    }
+
     let allowCredentials: any[] | undefined;
 
     if (userId) {
@@ -133,6 +145,10 @@ export class PasskeyService {
     response: any,
     expectedChallenge: string
   ): Promise<{ verified: boolean; userId?: string; error?: string }> {
+    if (!this.config.webauthn?.enabled) {
+      throw new Error('Passkey authentication is not enabled');
+    }
+
     try {
       // Get credential from database
       const credentialId = Buffer.from(response.id, 'base64url').toString('base64');
