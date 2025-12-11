@@ -19,8 +19,8 @@ export { InMemoryRevocationStore, TokenCache } from './tokens/token-store.js';
 export type { RevocationStore } from './tokens/token-store.js';
 
 // Elysia plugins
-// flashAuth: lightweight plugin with context & macros only (use in sub-routes)
-// flashAuthPlugin: full plugin with context, macros & auth routes (use in main app)
+// flashAuth: lightweight plugin with context & macros only (from elysia-plugin.ts)
+// flashAuthCore & flashAuthRoutes: split plugins for better modularity (from auth/index.ts)
 export {
   flashAuth,
   type FlashAuthPluginConfig,
