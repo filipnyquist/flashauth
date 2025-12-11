@@ -113,7 +113,7 @@ export function flashAuth(
         },
       };
     })
-    .macro(({ onBeforeHandle }) => ({
+    .macro({
       /**
        * Require authentication for this route
        * @example
@@ -124,11 +124,13 @@ export function flashAuth(
       isAuth(enabled: boolean) {
         if (!enabled) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
           }
-        });
+        };
       },
       
       /**
@@ -141,14 +143,16 @@ export function flashAuth(
       requirePermission(permission: string | false) {
         if (!permission) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
+            if (!flashAuth.hasPermission(permission)) {
+              throw new PermissionError(`Requires '${permission}' permission`);
+            }
           }
-          if (!flashAuth.hasPermission(permission)) {
-            throw new PermissionError(`Requires '${permission}' permission`);
-          }
-        });
+        };
       },
       
       /**
@@ -161,16 +165,18 @@ export function flashAuth(
       requireAnyPermission(permissions: string[] | false) {
         if (!permissions) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
+            if (!flashAuth.hasAnyPermission(permissions)) {
+              throw new PermissionError(
+                `Requires one of: ${permissions.join(', ')}`
+              );
+            }
           }
-          if (!flashAuth.hasAnyPermission(permissions)) {
-            throw new PermissionError(
-              `Requires one of: ${permissions.join(', ')}`
-            );
-          }
-        });
+        };
       },
       
       /**
@@ -183,16 +189,18 @@ export function flashAuth(
       requireAllPermissions(permissions: string[] | false) {
         if (!permissions) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
+            if (!flashAuth.hasAllPermissions(permissions)) {
+              throw new PermissionError(
+                `Requires all of: ${permissions.join(', ')}`
+              );
+            }
           }
-          if (!flashAuth.hasAllPermissions(permissions)) {
-            throw new PermissionError(
-              `Requires all of: ${permissions.join(', ')}`
-            );
-          }
-        });
+        };
       },
       
       /**
@@ -205,14 +213,16 @@ export function flashAuth(
       requireRole(role: string | false) {
         if (!role) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
+            if (!flashAuth.hasRole(role)) {
+              throw new PermissionError(`Requires '${role}' role`);
+            }
           }
-          if (!flashAuth.hasRole(role)) {
-            throw new PermissionError(`Requires '${role}' role`);
-          }
-        });
+        };
       },
       
       /**
@@ -225,18 +235,20 @@ export function flashAuth(
       requireAnyRole(roles: string[] | false) {
         if (!roles) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
+            if (!flashAuth.hasAnyRole(roles)) {
+              throw new PermissionError(
+                `Requires one of: ${roles.join(', ')}`
+              );
+            }
           }
-          if (!flashAuth.hasAnyRole(roles)) {
-            throw new PermissionError(
-              `Requires one of: ${roles.join(', ')}`
-            );
-          }
-        });
+        };
       },
-    }))
+    })
     .as('plugin' as any);
 }
 

@@ -32,7 +32,7 @@ bun add flashauth
 
 ```typescript
 import { Elysia } from 'elysia';
-import { FlashAuth, flashAuth, requirePermission } from 'flashauth';
+import { FlashAuth, flashAuthCore } from 'flashauth';
 
 // Initialize FlashAuth
 const auth = new FlashAuth({
@@ -43,9 +43,9 @@ const auth = new FlashAuth({
   },
 });
 
-// Create Elysia app
+// Create Elysia app with FlashAuth core (context & macros)
 const app = new Elysia()
-  .use(flashAuth(auth))
+  .use(flashAuthCore({ flashAuth: auth }))
   
   // Public login endpoint
   .post('/login', async ({ body }) => {
@@ -61,13 +61,24 @@ const app = new Elysia()
     return { token };
   })
   
+  // Protected endpoint - requires authentication
+  .get('/profile', ({ flashAuth }) => {
+    return {
+      user: flashAuth.claims?.sub,
+      email: flashAuth.claims?.email,
+    };
+  }, {
+    isAuth: true,  // Macro: requires authentication
+  })
+  
   // Protected endpoint - requires posts:read permission
-  .use(requirePermission('posts:read'))
   .get('/posts', ({ flashAuth }) => {
     return {
       posts: [],
       user: flashAuth.claims?.sub,
     };
+  }, {
+    requirePermission: 'posts:read',  // Macro: requires specific permission
   })
   
   .listen(3000);
@@ -200,23 +211,156 @@ const secret = FlashAuth.generateSecret();       // Uint8Array
 const secretHex = FlashAuth.generateSecretHex(); // Hex string
 ```
 
-### Elysia Plugin
+### Elysia Plugins
 
-#### Basic Setup
+FlashAuth provides two separate plugins for Elysia:
+
+#### flashAuthCore - Core Plugin (Context & Macros)
+
+Use this in your main app and sub-routes to get access to the `flashAuth` context and authentication macros.
 
 ```typescript
-import { flashAuth } from 'flashauth';
+import { flashAuthCore } from 'flashauth';
 
-app.use(flashAuth(auth, {
+// Create plugin instance (can be reused across sub-routes)
+const authCore = flashAuthCore({
+  flashAuth: auth,
   tokenLocation: 'bearer',  // or 'cookie'
   cookieName: 'auth_token', // for cookie mode
-  cookieSecure: true,
-  cookieHttpOnly: true,
-  cookieSameSite: 'strict',
-}));
+});
+
+// Use in main app
+app.use(authCore);
+
+// Use in sub-routes (defined in separate files)
+const apiRoutes = new Elysia({ prefix: '/api' })
+  .use(authCore)
+  .get('/protected', ({ flashAuth }) => flashAuth.claims, {
+    isAuth: true,
+  });
 ```
 
-#### Permission Guards
+**Available Macros:**
+- `isAuth: boolean` - Require authentication
+- `requirePermission: string` - Require specific permission
+- `requireAnyPermission: string[]` - Require any of multiple permissions
+- `requireAllPermissions: string[]` - Require all permissions
+- `requireRole: string` - Require specific role
+- `requireAnyRole: string[]` - Require any of multiple roles
+
+**Example using macros:**
+
+```typescript
+app.use(authCore)
+  // Require authentication
+  .get('/profile', ({ flashAuth }) => flashAuth.claims, {
+    isAuth: true,
+  })
+  
+  // Require specific permission
+  .get('/posts', () => getPosts(), {
+    requirePermission: 'posts:read',
+  })
+  
+  // Require any of multiple permissions
+  .delete('/posts/:id', ({ params }) => deletePost(params.id), {
+    requireAnyPermission: ['posts:delete', 'admin:*'],
+  })
+  
+  // Require all permissions
+  .get('/dashboard', () => getDashboard(), {
+    requireAllPermissions: ['users:read', 'posts:write'],
+  })
+  
+  // Require specific role
+  .get('/admin', () => getAdminPanel(), {
+    requireRole: 'admin',
+  });
+```
+
+#### flashAuthRoutes - Authentication Routes Plugin
+
+Use this ONCE in your main app to add `/auth/*` endpoints for user signup, login, 2FA, and passkeys.
+
+```typescript
+import { flashAuthCore, flashAuthRoutes } from 'flashauth';
+
+const app = new Elysia()
+  // Add core plugin (context & macros)
+  .use(flashAuthCore({ flashAuth: auth }))
+  
+  // Add authentication routes (/auth/signup, /auth/login, etc.)
+  .use(flashAuthRoutes({
+    flashAuth: auth,
+    databaseUrl: process.env.DATABASE_URL!,
+    webauthn: {
+      rpName: 'My App',
+      rpID: 'example.com',
+      origin: 'https://example.com',
+    },
+    passkeysEnabled: true,
+  }))
+  
+  .listen(3000);
+```
+
+**Provided Routes:**
+- `POST /auth/signup` - User registration
+- `POST /auth/verify-email` - Email verification
+- `POST /auth/login` - User login
+- `POST /auth/login/2fa` - 2FA login
+- `POST /auth/password-reset/request` - Request password reset
+- `POST /auth/password-reset/confirm` - Confirm password reset
+- `POST /auth/2fa/setup` - Setup 2FA (requires auth)
+- `POST /auth/2fa/verify` - Verify 2FA (requires auth)
+- `POST /auth/2fa/disable` - Disable 2FA (requires auth)
+- `POST /auth/passkey/register/start` - Start passkey registration (requires auth)
+- `POST /auth/passkey/register/finish` - Finish passkey registration (requires auth)
+- `POST /auth/passkey/login/start` - Start passkey login
+- `POST /auth/passkey/login/finish` - Finish passkey login
+
+#### Using with Sub-Routes
+
+When organizing routes in separate files, use `flashAuthCore` in each sub-route module:
+
+```typescript
+// routes/api.ts
+import { Elysia } from 'elysia';
+import { authCore } from './auth.js'; // Shared auth core instance
+
+export const apiRoutes = new Elysia({ prefix: '/api' })
+  .use(authCore) // Get flashAuth context and macros
+  .get('/protected', ({ flashAuth }) => flashAuth.claims, {
+    isAuth: true,
+  });
+
+// routes/users.ts
+import { Elysia } from 'elysia';
+import { authCore } from './auth.js';
+
+export const userRoutes = new Elysia({ prefix: '/users' })
+  .use(authCore) // Get flashAuth context and macros
+  .get('/', () => getUsers(), {
+    requirePermission: 'users:read',
+  });
+
+// main.ts
+import { Elysia } from 'elysia';
+import { flashAuthCore, flashAuthRoutes } from 'flashauth';
+import { apiRoutes } from './routes/api.js';
+import { userRoutes } from './routes/users.js';
+
+const app = new Elysia()
+  .use(flashAuthCore({ flashAuth: auth }))  // Main app uses core plugin
+  .use(flashAuthRoutes({ flashAuth: auth, databaseUrl: '...' }))  // Add /auth routes once
+  .use(apiRoutes)   // Mount sub-routes
+  .use(userRoutes)  // Mount sub-routes
+  .listen(3000);
+```
+
+#### Legacy: Permission Guards (Deprecated)
+
+The following guard functions are still available but deprecated in favor of macros:
 
 ```typescript
 import {
