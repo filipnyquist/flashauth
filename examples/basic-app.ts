@@ -24,8 +24,8 @@ const app = new Elysia()
   .use(flashAuthPlugin({
     flashAuth: auth,
     databaseUrl: process.env.DATABASE_URL || 'postgres://localhost:5432/flashauth',
+    passkeysEnabled: false, // Disable passkey features for this example
     webauthn: {
-      enabled: false, // Disable passkey features for this example
       rpName: 'FlashAuth Basic',
       rpID: 'localhost',
       origin: 'http://localhost:3000',

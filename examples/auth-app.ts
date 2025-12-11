@@ -25,9 +25,11 @@ const app = new Elysia()
     // FlashAuth instance for token management
     flashAuth: auth,
     
+    // Enable passkey authentication
+    passkeysEnabled: true,
+    
     // WebAuthn/Passkey configuration
     webauthn: {
-      enabled: true, // Enable passkey authentication
       rpName: 'FlashAuth Example',
       rpID: 'localhost',
       origin: 'http://localhost:3000',

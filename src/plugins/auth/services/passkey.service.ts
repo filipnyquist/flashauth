@@ -31,7 +31,7 @@ export class PasskeyService {
    * Generate registration options for a new passkey
    */
   async generateRegistrationOptions(userId: string, userName: string): Promise<any> {
-    if (!this.config.webauthn?.enabled) {
+    if (!this.config.passkeysEnabled) {
       throw new Error('Passkey authentication is not enabled');
     }
 
@@ -39,8 +39,8 @@ export class PasskeyService {
     const existingCredentials = await this.getUserCredentials(userId);
 
     const opts: GenerateRegistrationOptionsOpts = {
-      rpName: this.config.webauthn.rpName,
-      rpID: this.config.webauthn.rpID,
+      rpName: this.config.webauthn!.rpName,
+      rpID: this.config.webauthn!.rpID,
       userID: new TextEncoder().encode(userId),
       userName: userName,
       attestationType: 'none',
@@ -66,7 +66,7 @@ export class PasskeyService {
     response: any,
     expectedChallenge: string
   ): Promise<{ verified: boolean; error?: string }> {
-    if (!this.config.webauthn?.enabled) {
+    if (!this.config.passkeysEnabled) {
       throw new Error('Passkey authentication is not enabled');
     }
 
@@ -74,10 +74,10 @@ export class PasskeyService {
       const opts: VerifyRegistrationResponseOpts = {
         response,
         expectedChallenge,
-        expectedOrigin: Array.isArray(this.config.webauthn.origin) 
-          ? this.config.webauthn.origin 
-          : [this.config.webauthn.origin],
-        expectedRPID: this.config.webauthn.rpID,
+        expectedOrigin: Array.isArray(this.config.webauthn!.origin) 
+          ? this.config.webauthn!.origin 
+          : [this.config.webauthn!.origin],
+        expectedRPID: this.config.webauthn!.rpID,
       };
 
       const verification: VerifiedRegistrationResponse = await verifyRegistrationResponse(opts);
@@ -113,7 +113,7 @@ export class PasskeyService {
    * Generate authentication options for passkey login
    */
   async generateAuthenticationOptions(userId?: string): Promise<any> {
-    if (!this.config.webauthn?.enabled) {
+    if (!this.config.passkeysEnabled) {
       throw new Error('Passkey authentication is not enabled');
     }
 
@@ -130,7 +130,7 @@ export class PasskeyService {
     }
 
     const opts: GenerateAuthenticationOptionsOpts = {
-      rpID: this.config.webauthn.rpID,
+      rpID: this.config.webauthn!.rpID,
       allowCredentials,
       userVerification: 'preferred',
     };
@@ -145,7 +145,7 @@ export class PasskeyService {
     response: any,
     expectedChallenge: string
   ): Promise<{ verified: boolean; userId?: string; error?: string }> {
-    if (!this.config.webauthn?.enabled) {
+    if (!this.config.passkeysEnabled) {
       throw new Error('Passkey authentication is not enabled');
     }
 
@@ -161,10 +161,10 @@ export class PasskeyService {
       const opts: VerifyAuthenticationResponseOpts = {
         response,
         expectedChallenge,
-        expectedOrigin: Array.isArray(this.config.webauthn.origin)
-          ? this.config.webauthn.origin
-          : [this.config.webauthn.origin],
-        expectedRPID: this.config.webauthn.rpID,
+        expectedOrigin: Array.isArray(this.config.webauthn!.origin)
+          ? this.config.webauthn!.origin
+          : [this.config.webauthn!.origin],
+        expectedRPID: this.config.webauthn!.rpID,
         credential: {
           id: credential.credential_id,
           publicKey: Buffer.from(credential.public_key, 'base64'),

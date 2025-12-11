@@ -34,33 +34,6 @@ export interface AuthPluginConfig {
   cookieSameSite?: 'strict' | 'lax' | 'none';
 
   /**
-   * Relying Party (RP) configuration for WebAuthn/Passkey
-   */
-  webauthn: {
-    /**
-     * Enable/disable passkey authentication (default: false)
-     */
-    enabled?: boolean;
-
-    /**
-     * Human-readable name of the relying party (your app name)
-     */
-    rpName: string;
-
-    /**
-     * Relying Party ID - typically your domain
-     * Example: "example.com"
-     */
-    rpID: string;
-
-    /**
-     * Expected origin(s) for WebAuthn operations
-     * Example: "https://example.com" or ["https://example.com", "https://www.example.com"]
-     */
-    origin: string | string[];
-  };
-
-  /**
    * Email service for sending verification and reset emails
    * Optional - if not provided, tokens will be returned but emails won't be sent
    */
@@ -127,16 +100,54 @@ export interface AuthPluginConfig {
   };
 
   /**
+   * Enable/disable two-factor authentication (TOTP) (default: true)
+   */
+  totpEnabled?: boolean;
+
+  /**
+   * Enable/disable passkey authentication (default: false)
+   */
+  passkeysEnabled?: boolean;
+
+  /**
    * Disable user signups (default: false)
    * When true, the /auth/signup endpoint will return an error
    */
   disableSignup?: boolean;
+
+  /**
+   * Relying Party (RP) configuration for WebAuthn/Passkey
+   * Required when passkeysEnabled is true
+   */
+  webauthn?: {
+    /**
+     * Human-readable name of the relying party (your app name)
+     */
+    rpName: string;
+
+    /**
+     * Relying Party ID - typically your domain
+     * Example: "example.com"
+     */
+    rpID: string;
+
+    /**
+     * Expected origin(s) for WebAuthn operations
+     * Example: "https://example.com" or ["https://example.com", "https://www.example.com"]
+     */
+    origin: string | string[];
+  };
 }
 
 /**
  * Default configuration values
  */
 export const DEFAULT_CONFIG: Partial<AuthPluginConfig> = {
+  tokenLocation: 'bearer',
+  cookieName: 'auth_token',
+  totpEnabled: true,
+  passkeysEnabled: false,
+  disableSignup: false,
   tokenExpiration: {
     emailVerification: 24 * 60 * 60, // 24 hours
     passwordReset: 60 * 60, // 1 hour

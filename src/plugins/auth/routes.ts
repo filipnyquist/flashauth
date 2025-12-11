@@ -251,6 +251,13 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Setup TOTP 2FA
     .post('/2fa/setup', async ({ headers }) => {
+      if (!config.totpEnabled) {
+        return {
+          success: false,
+          error: 'Two-factor authentication is not enabled',
+        };
+      }
+
       // This endpoint requires authentication
       const authHeader = headers.authorization;
       if (!authHeader) {
@@ -286,6 +293,13 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Verify and enable TOTP
     .post('/2fa/verify', async ({ body, headers }) => {
+      if (!config.totpEnabled) {
+        return {
+          success: false,
+          error: 'Two-factor authentication is not enabled',
+        };
+      }
+
       const authHeader = headers.authorization;
       if (!authHeader) {
         return {
@@ -319,6 +333,13 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Disable TOTP
     .post('/2fa/disable', async ({ headers }) => {
+      if (!config.totpEnabled) {
+        return {
+          success: false,
+          error: 'Two-factor authentication is not enabled',
+        };
+      }
+
       const authHeader = headers.authorization;
       if (!authHeader) {
         return {
@@ -341,7 +362,7 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Passkey registration start
     .post('/passkey/register/start', async ({ headers }) => {
-      if (!config.webauthn.enabled) {
+      if (!config.passkeysEnabled) {
         return {
           success: false,
           error: 'Passkey authentication is not enabled',
@@ -381,7 +402,7 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Passkey registration finish
     .post('/passkey/register/finish', async ({ body, headers }) => {
-      if (!config.webauthn.enabled) {
+      if (!config.passkeysEnabled) {
         return {
           success: false,
           error: 'Passkey authentication is not enabled',
@@ -432,7 +453,7 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Passkey authentication start
     .post('/passkey/login/start', async () => {
-      if (!config.webauthn.enabled) {
+      if (!config.passkeysEnabled) {
         return {
           success: false,
           error: 'Passkey authentication is not enabled',
@@ -454,7 +475,7 @@ export function createAuthRoutes(db: DatabaseConnection, config: AuthPluginConfi
 
     // Passkey authentication finish
     .post('/passkey/login/finish', async ({ body }) => {
-      if (!config.webauthn.enabled) {
+      if (!config.passkeysEnabled) {
         return {
           success: false,
           error: 'Passkey authentication is not enabled',
