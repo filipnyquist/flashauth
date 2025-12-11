@@ -18,8 +18,16 @@ export { TokenBuilder } from './tokens/token-builder.js';
 export { InMemoryRevocationStore, TokenCache } from './tokens/token-store.js';
 export type { RevocationStore } from './tokens/token-store.js';
 
-// Elysia plugin (removed - use flashAuthPlugin instead)
-// Guard functions are still available but deprecated in favor of macros
+// Elysia plugins
+// flashAuth: lightweight plugin with context & macros only (from elysia-plugin.ts)
+// flashAuthCore & flashAuthRoutes: split plugins for better modularity (from auth/index.ts)
+export {
+  flashAuth,
+  type FlashAuthPluginConfig,
+  type FlashAuthContext as FlashAuthElysiaContext,
+} from './plugins/elysia-plugin.js';
+
+// Guard functions (deprecated in favor of macros, but still available)
 export {
   requireAuth,
   requirePermission,
@@ -61,10 +69,14 @@ export { generateSecret } from './core/cryptography.js';
 // PASETO utilities (for advanced usage)
 export { base64urlEncode, base64urlDecode } from './core/paseto.js';
 
-// Authentication plugin (user management with email/password, 2FA, passkeys)
+// Authentication plugins
+// flashAuthCore: lightweight plugin with context & macros only (use in sub-routes)
+// flashAuthRoutes: plugin with /auth routes only (use once in main app)
 export {
-  flashAuthPlugin,
+  flashAuthCore,
+  flashAuthRoutes,
   runMigrations,
+  type FlashAuthCoreConfig,
   type AuthPluginConfig,
   type FlashAuthContext,
   type User,

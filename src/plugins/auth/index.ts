@@ -9,6 +9,7 @@ import { DEFAULT_CONFIG } from './config.js';
 import { createDatabaseConnection } from './utils/db.js';
 import { createAuthRoutes } from './routes.js';
 import type { Claims } from '../../core/claims.js';
+import type { FlashAuth } from '../../flashauth.js';
 import { TokenError, PermissionError } from '../../core/errors.js';
 
 export { type AuthPluginConfig } from './config.js';
@@ -43,46 +44,46 @@ export interface FlashAuthContext {
 }
 
 /**
- * Create FlashAuth authentication plugin for Elysia
+ * Configuration for the core auth plugin (context & macros only)
+ */
+export interface FlashAuthCoreConfig {
+  /** FlashAuth instance for token validation */
+  flashAuth: FlashAuth;
+  /** Token location: 'bearer' for Authorization header, 'cookie' for cookies */
+  tokenLocation?: 'bearer' | 'cookie';
+  /** Cookie name (when tokenLocation is 'cookie') */
+  cookieName?: string;
+}
+
+/**
+ * Create core FlashAuth plugin (context & macros only, no /auth routes)
+ * Use this in sub-routes to get access to flashAuth context and authentication macros.
  * 
  * @example
  * ```typescript
  * import { Elysia } from 'elysia';
- * import { FlashAuth, flashAuthPlugin } from 'flashauth';
+ * import { FlashAuth, flashAuthCore } from 'flashauth';
  * 
  * const auth = new FlashAuth({ secret: process.env.AUTH_SECRET! });
+ * const authCore = flashAuthCore({ flashAuth: auth });
  * 
- * const app = new Elysia()
- *   .use(flashAuthPlugin({
- *     databaseUrl: process.env.DATABASE_URL!,
- *     flashAuth: auth,
- *     webauthn: {
- *       rpName: 'My App',
- *       rpID: 'example.com',
- *       origin: 'https://example.com',
- *     },
- *   }))
- *   .listen(3000);
+ * // In sub-routes file:
+ * const apiRoutes = new Elysia({ prefix: '/api' })
+ *   .use(authCore)
+ *   .get('/protected', ({ flashAuth }) => flashAuth.claims, {
+ *     isAuth: true
+ *   });
  * ```
  */
-export function flashAuthPlugin(config: AuthPluginConfig) {
-  // Merge with default config
-  const fullConfig: AuthPluginConfig = {
-    ...config,
-    tokenLocation: config.tokenLocation || 'bearer',
-    cookieName: config.cookieName || 'auth_token',
-    tokenExpiration: {
-      ...DEFAULT_CONFIG.tokenExpiration,
-      ...config.tokenExpiration,
-    },
-    security: {
-      ...DEFAULT_CONFIG.security,
-      ...config.security,
-    },
-  };
+export function flashAuthCore(config: FlashAuthCoreConfig) {
+  const {
+    flashAuth: auth,
+    tokenLocation = 'bearer',
+    cookieName = 'auth_token',
+  } = config;
 
-  const plugin = new Elysia({
-    name: 'flashauth-plugin',
+  return new Elysia({
+    name: 'flashauth-core',
   })
     // Add token validation and flashAuth context
     .derive(async ({ headers, cookie }) => {
@@ -91,13 +92,13 @@ export function flashAuthPlugin(config: AuthPluginConfig) {
 
       try {
         // Extract token from request
-        if (fullConfig.tokenLocation === 'bearer') {
+        if (tokenLocation === 'bearer') {
           const authHeader = headers['authorization'];
           if (authHeader && authHeader.startsWith('Bearer ')) {
             token = authHeader.slice(7);
           }
-        } else if (fullConfig.tokenLocation === 'cookie') {
-          const cookieValue = cookie[fullConfig.cookieName!];
+        } else if (tokenLocation === 'cookie') {
+          const cookieValue = cookie[cookieName];
           if (cookieValue && typeof cookieValue.value === 'string') {
             token = cookieValue.value;
           }
@@ -105,7 +106,7 @@ export function flashAuthPlugin(config: AuthPluginConfig) {
 
         // Validate token if present
         if (token) {
-          claims = await fullConfig.flashAuth.validateToken(token);
+          claims = await auth.validateToken(token);
         }
       } catch (error) {
         // Token validation failed - leave claims as null
@@ -133,14 +134,14 @@ export function flashAuthPlugin(config: AuthPluginConfig) {
           },
           async revokeToken(): Promise<void> {
             if (claims?.jti) {
-              await fullConfig.flashAuth.revokeToken(claims.jti, claims.exp);
+              await auth.revokeToken(claims.jti, claims.exp);
             }
           },
         },
       };
     })
     // Add macros for route-level authentication
-    .macro(({ onBeforeHandle }) => ({
+    .macro({
       /**
        * Require authentication for this route
        * @example
@@ -151,11 +152,13 @@ export function flashAuthPlugin(config: AuthPluginConfig) {
       isAuth(enabled: boolean) {
         if (!enabled) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
           }
-        });
+        };
       },
       
       /**
@@ -168,14 +171,16 @@ export function flashAuthPlugin(config: AuthPluginConfig) {
       requirePermission(permission: string | false) {
         if (!permission) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
+            if (!flashAuth.hasPermission(permission)) {
+              throw new PermissionError(`Requires '${permission}' permission`);
+            }
           }
-          if (!flashAuth.hasPermission(permission)) {
-            throw new PermissionError(`Requires '${permission}' permission`);
-          }
-        });
+        };
       },
       
       /**
@@ -188,16 +193,18 @@ export function flashAuthPlugin(config: AuthPluginConfig) {
       requireAnyPermission(permissions: string[] | false) {
         if (!permissions) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
+            if (!flashAuth.hasAnyPermission(permissions)) {
+              throw new PermissionError(
+                `Requires one of: ${permissions.join(', ')}`
+              );
+            }
           }
-          if (!flashAuth.hasAnyPermission(permissions)) {
-            throw new PermissionError(
-              `Requires one of: ${permissions.join(', ')}`
-            );
-          }
-        });
+        };
       },
       
       /**
@@ -210,16 +217,18 @@ export function flashAuthPlugin(config: AuthPluginConfig) {
       requireAllPermissions(permissions: string[] | false) {
         if (!permissions) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
+            if (!flashAuth.hasAllPermissions(permissions)) {
+              throw new PermissionError(
+                `Requires all of: ${permissions.join(', ')}`
+              );
+            }
           }
-          if (!flashAuth.hasAllPermissions(permissions)) {
-            throw new PermissionError(
-              `Requires all of: ${permissions.join(', ')}`
-            );
-          }
-        });
+        };
       },
       
       /**
@@ -232,14 +241,16 @@ export function flashAuthPlugin(config: AuthPluginConfig) {
       requireRole(role: string | false) {
         if (!role) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
+            if (!flashAuth.hasRole(role)) {
+              throw new PermissionError(`Requires '${role}' role`);
+            }
           }
-          if (!flashAuth.hasRole(role)) {
-            throw new PermissionError(`Requires '${role}' role`);
-          }
-        });
+        };
       },
       
       /**
@@ -252,18 +263,61 @@ export function flashAuthPlugin(config: AuthPluginConfig) {
       requireAnyRole(roles: string[] | false) {
         if (!roles) return;
         
-        onBeforeHandle(({ flashAuth }: any) => {
-          if (!flashAuth || !flashAuth.claims) {
-            throw new TokenError('Authentication required');
+        return {
+          beforeHandle({ flashAuth }: any) {
+            if (!flashAuth || !flashAuth.claims) {
+              throw new TokenError('Authentication required');
+            }
+            if (!flashAuth.hasAnyRole(roles)) {
+              throw new PermissionError(
+                `Requires one of: ${roles.join(', ')}`
+              );
+            }
           }
-          if (!flashAuth.hasAnyRole(roles)) {
-            throw new PermissionError(
-              `Requires one of: ${roles.join(', ')}`
-            );
-          }
-        });
+        };
       },
-    }));
+    })
+    .as('plugin' as any);
+}
+
+/**
+ * Create FlashAuth routes plugin (provides /auth/* endpoints only)
+ * Use this once in the main app to add authentication routes.
+ * 
+ * @example
+ * ```typescript
+ * import { Elysia } from 'elysia';
+ * import { FlashAuth, flashAuthCore, flashAuthRoutes } from 'flashauth';
+ * 
+ * const auth = new FlashAuth({ secret: process.env.AUTH_SECRET! });
+ * 
+ * const app = new Elysia()
+ *   .use(flashAuthCore({ flashAuth: auth }))
+ *   .use(flashAuthRoutes({
+ *     flashAuth: auth,
+ *     databaseUrl: process.env.DATABASE_URL!,
+ *     webauthn: { rpName: 'My App', rpID: 'example.com', origin: 'https://example.com' }
+ *   }))
+ *   .listen(3000);
+ * ```
+ */
+export function flashAuthRoutes(config: AuthPluginConfig) {
+  // Merge with default config
+  const fullConfig: AuthPluginConfig = {
+    ...config,
+    tokenExpiration: {
+      ...DEFAULT_CONFIG.tokenExpiration,
+      ...config.tokenExpiration,
+    },
+    security: {
+      ...DEFAULT_CONFIG.security,
+      ...config.security,
+    },
+  };
+
+  const plugin = new Elysia({
+    name: 'flashauth-routes',
+  });
 
   // Only add auth routes if database is configured
   if (fullConfig.databaseUrl) {
@@ -280,7 +334,7 @@ export function flashAuthPlugin(config: AuthPluginConfig) {
  * 
  * @example
  * ```typescript
- * import { runMigrations } from 'flashauth/plugins/auth';
+ * import { runMigrations } from 'flashauth';
  * import { readFileSync } from 'fs';
  * 
  * const migrationSql = readFileSync('./migrations/001_initial.sql', 'utf-8');
@@ -292,3 +346,4 @@ export async function runMigrations(databaseUrl: string, migrationSql: string): 
   await db.runMigrations(migrationSql);
   await db.close();
 }
+
