@@ -18,11 +18,16 @@ export { TokenBuilder } from './tokens/token-builder.js';
 export { InMemoryRevocationStore, TokenCache } from './tokens/token-store.js';
 export type { RevocationStore } from './tokens/token-store.js';
 
-// Elysia plugin
+// Elysia plugin (removed - use flashAuthPlugin instead)
+// Guard functions are still available but deprecated in favor of macros
 export {
-  flashAuth,
+  requireAuth,
+  requirePermission,
+  requireAnyPermission,
+  requireAllPermissions,
+  requireRole,
+  requireAnyRole,
 } from './plugins/elysia-plugin.js';
-export type { FlashAuthPluginConfig, FlashAuthContext } from './plugins/elysia-plugin.js';
 
 // Permission utilities
 export type { RolePermissions } from './utils/permission-utils.js';
@@ -61,6 +66,7 @@ export {
   flashAuthPlugin,
   runMigrations,
   type AuthPluginConfig,
+  type FlashAuthContext,
   type User,
   type UserPublic,
   type CreateUserInput,
