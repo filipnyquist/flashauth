@@ -1,17 +1,19 @@
 /**
- * User service for user CRUD operations
+ * User service using Drizzle ORM
  */
 
-import type { DatabaseConnection } from '../utils/db.js';
-import type { User, CreateUserInput } from '../models/user.model.js';
+import { eq } from 'drizzle-orm';
+import { users } from '../../../schema/index.js';
+import type { User } from '../../../schema/index.js';
+import type { CreateUserInput } from '../models/user.model.js';
 import type { AuthPluginConfig } from '../config.js';
 import { PasswordService } from './password.service.js';
 
 export class UserService {
-  private db: DatabaseConnection;
+  private db: any;
   private passwordService: PasswordService;
 
-  constructor(db: DatabaseConnection, config: AuthPluginConfig) {
+  constructor(db: any, config: AuthPluginConfig) {
     this.db = db;
     this.passwordService = new PasswordService(config);
   }
@@ -20,81 +22,69 @@ export class UserService {
    * Create a new user
    */
   async createUser(input: CreateUserInput): Promise<User> {
-    // Validate email format
     if (!this.isValidEmail(input.email)) {
       throw new Error('Invalid email format');
     }
 
-    // Validate password strength
     const passwordValidation = this.passwordService.validatePasswordStrength(input.password);
     if (!passwordValidation.valid) {
       throw new Error(passwordValidation.errors.join(', '));
     }
 
-    // Check if user already exists
     const existing = await this.findByEmail(input.email);
     if (existing) {
       throw new Error('User with this email already exists');
     }
 
-    // Hash password
-    const password_hash = await this.passwordService.hashPassword(input.password);
+    const passwordHash = await this.passwordService.hashPassword(input.password);
 
-    // Insert user
-    const sql = `
-      INSERT INTO users (email, password_hash, email_verified)
-      VALUES ($1, $2, $3)
-      RETURNING *
-    `;
+    const [newUser] = await this.db.insert(users).values({
+      email: input.email,
+      passwordHash,
+      emailVerified: false,
+    }).returning();
 
-    const user = await this.db.queryOne<User>(sql, [input.email, password_hash, false]);
-    if (!user) {
+    if (!newUser) {
       throw new Error('Failed to create user');
     }
 
-    return user;
+    return newUser;
   }
 
   /**
    * Find user by ID
    */
   async findById(id: string): Promise<User | null> {
-    const sql = 'SELECT * FROM users WHERE id = $1';
-    return await this.db.queryOne<User>(sql, [id]);
+    const results = await this.db.select().from(users).where(eq(users.id, id)).limit(1);
+    return results[0] ?? null;
   }
 
   /**
    * Find user by email
    */
   async findByEmail(email: string): Promise<User | null> {
-    const sql = 'SELECT * FROM users WHERE email = $1';
-    return await this.db.queryOne<User>(sql, [email]);
+    const results = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
+    return results[0] ?? null;
   }
 
   /**
    * Update user's email verification status
    */
   async markEmailVerified(userId: string): Promise<void> {
-    const sql = 'UPDATE users SET email_verified = $1 WHERE id = $2';
-    await this.db.execute(sql, [true, userId]);
+    await this.db.update(users).set({ emailVerified: true }).where(eq(users.id, userId));
   }
 
   /**
    * Update user's password
    */
   async updatePassword(userId: string, newPassword: string): Promise<void> {
-    // Validate password strength
     const passwordValidation = this.passwordService.validatePasswordStrength(newPassword);
     if (!passwordValidation.valid) {
       throw new Error(passwordValidation.errors.join(', '));
     }
 
-    // Hash new password
-    const password_hash = await this.passwordService.hashPassword(newPassword);
-
-    // Update password
-    const sql = 'UPDATE users SET password_hash = $1 WHERE id = $2';
-    await this.db.execute(sql, [password_hash, userId]);
+    const passwordHash = await this.passwordService.hashPassword(newPassword);
+    await this.db.update(users).set({ passwordHash }).where(eq(users.id, userId));
   }
 
   /**
@@ -102,11 +92,11 @@ export class UserService {
    */
   async verifyPassword(userId: string, password: string): Promise<boolean> {
     const user = await this.findById(userId);
-    if (!user) {
+    if (!user || !user.passwordHash) {
       return false;
     }
 
-    return await this.passwordService.verifyPassword(password, user.password_hash);
+    return await this.passwordService.verifyPassword(password, user.passwordHash);
   }
 
   /**
@@ -114,11 +104,11 @@ export class UserService {
    */
   async authenticate(email: string, password: string): Promise<User | null> {
     const user = await this.findByEmail(email);
-    if (!user) {
+    if (!user || !user.passwordHash) {
       return null;
     }
 
-    const valid = await this.passwordService.verifyPassword(password, user.password_hash);
+    const valid = await this.passwordService.verifyPassword(password, user.passwordHash);
     if (!valid) {
       return null;
     }
@@ -130,8 +120,7 @@ export class UserService {
    * Delete user
    */
   async deleteUser(userId: string): Promise<void> {
-    const sql = 'DELETE FROM users WHERE id = $1';
-    await this.db.execute(sql, [userId]);
+    await this.db.delete(users).where(eq(users.id, userId));
   }
 
   /**

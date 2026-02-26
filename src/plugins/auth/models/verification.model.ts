@@ -1,11 +1,9 @@
 /**
  * Email verification token model
+ * Now JWT-based, no database table needed
  */
 
 export interface EmailVerificationToken {
-  id: string;
-  user_id: string;
-  token: string;
-  expires_at: Date;
-  created_at: Date;
+  userId: string;
+  purpose: 'email_verification';
 }

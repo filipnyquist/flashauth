@@ -1,11 +1,9 @@
 /**
  * Password reset token model
+ * Now JWT-based, no database table needed
  */
 
 export interface PasswordResetToken {
-  id: string;
-  user_id: string;
-  token: string;
-  expires_at: Date;
-  created_at: Date;
+  userId: string;
+  purpose: 'password_reset';
 }

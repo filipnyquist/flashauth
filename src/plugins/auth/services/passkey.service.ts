@@ -1,5 +1,5 @@
 /**
- * Passkey/WebAuthn service using @simplewebauthn/server
+ * Passkey/WebAuthn service using @simplewebauthn/server and Drizzle ORM
  */
 
 import {
@@ -14,15 +14,16 @@ import {
   type VerifiedRegistrationResponse,
   type VerifiedAuthenticationResponse,
 } from '@simplewebauthn/server';
-import type { DatabaseConnection } from '../utils/db.js';
-import type { PasskeyCredential } from '../models/passkey.model.js';
+import { eq } from 'drizzle-orm';
+import { passkeyCredentials } from '../../../schema/index.js';
+import type { PasskeyCredential } from '../../../schema/index.js';
 import type { AuthPluginConfig } from '../config.js';
 
 export class PasskeyService {
-  private db: DatabaseConnection;
+  private db: any;
   private config: AuthPluginConfig;
 
-  constructor(db: DatabaseConnection, config: AuthPluginConfig) {
+  constructor(db: any, config: AuthPluginConfig) {
     this.db = db;
     this.config = config;
   }
@@ -39,18 +40,17 @@ export class PasskeyService {
       throw new Error('WebAuthn configuration is required when passkeys are enabled');
     }
 
-    // Get user's existing credentials to exclude them
     const existingCredentials = await this.getUserCredentials(userId);
-
     const webauthn = this.config.webauthn;
+
     const opts: GenerateRegistrationOptionsOpts = {
       rpName: webauthn.rpName,
       rpID: webauthn.rpID,
       userID: new TextEncoder().encode(userId),
-      userName: userName,
+      userName,
       attestationType: 'none',
       excludeCredentials: existingCredentials.map(cred => ({
-        id: cred.credential_id,
+        id: cred.credentialId,
         type: 'public-key' as const,
         transports: cred.transports as any[],
       })),
@@ -84,8 +84,8 @@ export class PasskeyService {
       const opts: VerifyRegistrationResponseOpts = {
         response,
         expectedChallenge,
-        expectedOrigin: Array.isArray(webauthn.origin) 
-          ? webauthn.origin 
+        expectedOrigin: Array.isArray(webauthn.origin)
+          ? webauthn.origin
           : [webauthn.origin],
         expectedRPID: webauthn.rpID,
       };
@@ -98,20 +98,13 @@ export class PasskeyService {
 
       const { credential } = verification.registrationInfo;
 
-      // Store credential in database
-      const sql = `
-        INSERT INTO passkey_credentials (user_id, credential_id, public_key, counter, transports)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING *
-      `;
-
-      await this.db.queryOne<PasskeyCredential>(sql, [
+      await this.db.insert(passkeyCredentials).values({
         userId,
-        Buffer.from(credential.id).toString('base64'),
-        Buffer.from(credential.publicKey).toString('base64'),
-        credential.counter,
-        response.response.transports || [],
-      ]);
+        credentialId: Buffer.from(credential.id).toString('base64'),
+        publicKey: Buffer.from(credential.publicKey).toString('base64'),
+        counter: credential.counter,
+        transports: response.response.transports || [],
+      });
 
       return { verified: true };
     } catch (error) {
@@ -134,10 +127,9 @@ export class PasskeyService {
     let allowCredentials: any[] | undefined;
 
     if (userId) {
-      // Get user's credentials
       const credentials = await this.getUserCredentials(userId);
       allowCredentials = credentials.map(cred => ({
-        id: cred.credential_id,
+        id: cred.credentialId,
         type: 'public-key' as const,
         transports: cred.transports as any[],
       }));
@@ -168,7 +160,6 @@ export class PasskeyService {
     }
 
     try {
-      // Get credential from database
       const credentialId = Buffer.from(response.id, 'base64url').toString('base64');
       const credential = await this.getCredentialById(credentialId);
 
@@ -185,8 +176,8 @@ export class PasskeyService {
           : [webauthn.origin],
         expectedRPID: webauthn.rpID,
         credential: {
-          id: credential.credential_id,
-          publicKey: Buffer.from(credential.public_key, 'base64'),
+          id: credential.credentialId,
+          publicKey: Buffer.from(credential.publicKey, 'base64'),
           counter: credential.counter,
         },
       };
@@ -197,10 +188,9 @@ export class PasskeyService {
         return { verified: false, error: 'Authentication verification failed' };
       }
 
-      // Update counter and last used timestamp
       await this.updateCredentialCounter(credential.id, verification.authenticationInfo.newCounter);
 
-      return { verified: true, userId: credential.user_id };
+      return { verified: true, userId: credential.userId };
     } catch (error) {
       return { verified: false, error: (error as Error).message };
     }
@@ -210,35 +200,34 @@ export class PasskeyService {
    * Get all credentials for a user
    */
   async getUserCredentials(userId: string): Promise<PasskeyCredential[]> {
-    const sql = 'SELECT * FROM passkey_credentials WHERE user_id = $1';
-    return await this.db.query<PasskeyCredential>(sql, [userId]);
+    return await this.db.select().from(passkeyCredentials)
+      .where(eq(passkeyCredentials.userId, userId));
   }
 
   /**
    * Get credential by credential ID
    */
   async getCredentialById(credentialId: string): Promise<PasskeyCredential | null> {
-    const sql = 'SELECT * FROM passkey_credentials WHERE credential_id = $1';
-    return await this.db.queryOne<PasskeyCredential>(sql, [credentialId]);
+    const results = await this.db.select().from(passkeyCredentials)
+      .where(eq(passkeyCredentials.credentialId, credentialId))
+      .limit(1);
+    return results[0] ?? null;
   }
 
   /**
    * Delete a credential
    */
   async deleteCredential(credentialId: string): Promise<void> {
-    const sql = 'DELETE FROM passkey_credentials WHERE id = $1';
-    await this.db.execute(sql, [credentialId]);
+    await this.db.delete(passkeyCredentials)
+      .where(eq(passkeyCredentials.id, credentialId));
   }
 
   /**
    * Update credential counter
    */
-  private async updateCredentialCounter(credentialId: string, newCounter: number): Promise<void> {
-    const sql = `
-      UPDATE passkey_credentials
-      SET counter = $1, last_used_at = $2
-      WHERE id = $3
-    `;
-    await this.db.execute(sql, [newCounter, new Date(), credentialId]);
+  private async updateCredentialCounter(id: string, newCounter: number): Promise<void> {
+    await this.db.update(passkeyCredentials)
+      .set({ counter: newCounter })
+      .where(eq(passkeyCredentials.id, id));
   }
 }

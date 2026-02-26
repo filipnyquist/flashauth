@@ -75,7 +75,6 @@ export { base64urlEncode, base64urlDecode } from './core/jwt.js';
 export {
   flashAuthCore,
   flashAuthRoutes,
-  runMigrations,
   type FlashAuthCoreConfig,
   type AuthPluginConfig,
   type FlashAuthContext,

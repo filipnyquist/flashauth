@@ -1,15 +1,9 @@
 /**
- * User model
+ * User model - re-exports from Drizzle schema
  */
 
-export interface User {
-  id: string;
-  email: string;
-  password_hash: string;
-  email_verified: boolean;
-  created_at: Date;
-  updated_at: Date;
-}
+export type { User, NewUser } from '../../../schema/index.js';
+import type { User } from '../../../schema/index.js';
 
 export interface CreateUserInput {
   email: string;
@@ -19,8 +13,8 @@ export interface CreateUserInput {
 export interface UserPublic {
   id: string;
   email: string;
-  email_verified: boolean;
-  created_at: Date;
+  emailVerified: boolean;
+  createdAt: Date;
 }
 
 /**
@@ -30,7 +24,7 @@ export function toPublicUser(user: User): UserPublic {
   return {
     id: user.id,
     email: user.email,
-    email_verified: user.email_verified,
-    created_at: user.created_at,
+    emailVerified: user.emailVerified,
+    createdAt: user.createdAt,
   };
 }
