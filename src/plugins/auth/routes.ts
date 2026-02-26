@@ -10,7 +10,7 @@ import { PasswordResetService } from './services/reset.service.js';
 import { TOTPService } from './services/totp.service.js';
 import { PasskeyService } from './services/passkey.service.js';
 import { InviteService } from './services/invite.service.js';
-import { PermissionService } from './services/permission.service.js';
+import { RoleService } from './services/role.service.js';
 import { ApiKeyService } from './services/apikey.service.js';
 import { toPublicUser } from './models/user.model.js';
 
@@ -51,7 +51,7 @@ export function createAuthRoutes(db: any, config: AuthPluginConfig) {
   const totpService = new TOTPService(db, config);
   const passkeyService = new PasskeyService(db, config);
   const inviteService = new InviteService(db);
-  const permissionService = new PermissionService(db);
+  const roleService = new RoleService(db);
   const apiKeyService = new ApiKeyService(db);
 
   // Store challenges temporarily (in production, use Redis or similar)
@@ -112,7 +112,7 @@ export function createAuthRoutes(db: any, config: AuthPluginConfig) {
 
       // If invite has a role, assign it
       if (invite.roleId) {
-        await permissionService.assignRoleToUser(user.id, invite.roleId);
+        await roleService.assignRoleToUser(user.id, invite.roleId);
       }
 
       const token = await verificationService.createVerificationToken(user.id);
@@ -504,7 +504,7 @@ export function createAuthRoutes(db: any, config: AuthPluginConfig) {
     // ─── Roles ───────────────────────────────────────────────────────────
     .post('/roles', async ({ body, headers, cookie }) => {
       await requireAuthClaims(headers, cookie, config);
-      const role = await permissionService.createRole(body.name, body.description);
+      const role = await roleService.createRole(body.name, body.description);
       return { success: true, role };
     }, {
       body: t.Object({
@@ -514,43 +514,20 @@ export function createAuthRoutes(db: any, config: AuthPluginConfig) {
     })
 
     .get('/roles', async () => {
-      const rolesList = await permissionService.listRoles();
+      const rolesList = await roleService.listRoles();
       return { success: true, roles: rolesList };
     })
 
     .delete('/roles/:id', async ({ params, headers, cookie }) => {
       await requireAuthClaims(headers, cookie, config);
-      await permissionService.deleteRole(params.id);
+      await roleService.deleteRole(params.id);
       return { success: true, message: 'Role deleted' };
-    })
-
-    // ─── Permissions ─────────────────────────────────────────────────────
-    .post('/permissions', async ({ body, headers, cookie }) => {
-      await requireAuthClaims(headers, cookie, config);
-      const permission = await permissionService.createPermission(body.name, body.description);
-      return { success: true, permission };
-    }, {
-      body: t.Object({
-        name: t.String(),
-        description: t.Optional(t.String()),
-      }),
-    })
-
-    .get('/permissions', async () => {
-      const permissionsList = await permissionService.listPermissions();
-      return { success: true, permissions: permissionsList };
-    })
-
-    .delete('/permissions/:id', async ({ params, headers, cookie }) => {
-      await requireAuthClaims(headers, cookie, config);
-      await permissionService.deletePermission(params.id);
-      return { success: true, message: 'Permission deleted' };
     })
 
     // ─── User Roles ──────────────────────────────────────────────────────
     .post('/users/:userId/roles', async ({ params, body, headers, cookie }) => {
       await requireAuthClaims(headers, cookie, config);
-      await permissionService.assignRoleToUser(params.userId, body.roleId);
+      await roleService.assignRoleToUser(params.userId, body.roleId);
       return { success: true, message: 'Role assigned to user' };
     }, {
       body: t.Object({
@@ -560,47 +537,13 @@ export function createAuthRoutes(db: any, config: AuthPluginConfig) {
 
     .delete('/users/:userId/roles/:roleId', async ({ params, headers, cookie }) => {
       await requireAuthClaims(headers, cookie, config);
-      await permissionService.removeRoleFromUser(params.userId, params.roleId);
+      await roleService.removeRoleFromUser(params.userId, params.roleId);
       return { success: true, message: 'Role removed from user' };
     })
 
-    // ─── User Permissions ────────────────────────────────────────────────
-    .post('/users/:userId/permissions', async ({ params, body, headers, cookie }) => {
+    .get('/users/:userId/roles', async ({ params, headers, cookie }) => {
       await requireAuthClaims(headers, cookie, config);
-      await permissionService.assignPermissionToUser(params.userId, body.permissionId);
-      return { success: true, message: 'Permission assigned to user' };
-    }, {
-      body: t.Object({
-        permissionId: t.String(),
-      }),
-    })
-
-    .delete('/users/:userId/permissions/:permissionId', async ({ params, headers, cookie }) => {
-      await requireAuthClaims(headers, cookie, config);
-      await permissionService.removePermissionFromUser(params.userId, params.permissionId);
-      return { success: true, message: 'Permission removed from user' };
-    })
-
-    .get('/users/:userId/permissions', async ({ params, headers, cookie }) => {
-      await requireAuthClaims(headers, cookie, config);
-      const perms = await permissionService.getUserPermissions(params.userId);
-      return { success: true, permissions: perms };
-    })
-
-    // ─── Role Permissions ────────────────────────────────────────────────
-    .post('/roles/:roleId/permissions', async ({ params, body, headers, cookie }) => {
-      await requireAuthClaims(headers, cookie, config);
-      await permissionService.assignPermissionToRole(params.roleId, body.permissionId);
-      return { success: true, message: 'Permission assigned to role' };
-    }, {
-      body: t.Object({
-        permissionId: t.String(),
-      }),
-    })
-
-    .delete('/roles/:roleId/permissions/:permissionId', async ({ params, headers, cookie }) => {
-      await requireAuthClaims(headers, cookie, config);
-      await permissionService.removePermissionFromRole(params.roleId, params.permissionId);
-      return { success: true, message: 'Permission removed from role' };
+      const userRoles = await roleService.getUserRoles(params.userId);
+      return { success: true, roles: userRoles };
     });
 }

@@ -16,10 +16,7 @@ describe('Schema SQL Generation', () => {
   const expectedTables = [
     'users',
     'roles',
-    'permissions',
     'user_roles',
-    'role_permissions',
-    'user_permissions',
     'invite_links',
     'passkey_credentials',
     'api_keys',
@@ -44,8 +41,6 @@ describe('Schema SQL Generation', () => {
     const sql = getSchemaSQL();
     expect(sql).toContain('CREATE UNIQUE INDEX');
     expect(sql).toContain('user_roles_user_role_idx');
-    expect(sql).toContain('role_permissions_role_perm_idx');
-    expect(sql).toContain('user_permissions_user_perm_idx');
   });
 });
 
@@ -53,10 +48,7 @@ describe('Schema Exports', () => {
   test('should export all table objects', () => {
     expect(schema.users).toBeDefined();
     expect(schema.roles).toBeDefined();
-    expect(schema.permissions).toBeDefined();
     expect(schema.userRoles).toBeDefined();
-    expect(schema.rolePermissions).toBeDefined();
-    expect(schema.userPermissions).toBeDefined();
     expect(schema.inviteLinks).toBeDefined();
     expect(schema.passkeyCredentials).toBeDefined();
     expect(schema.apiKeys).toBeDefined();
@@ -66,10 +58,7 @@ describe('Schema Exports', () => {
   test('should export relation objects', () => {
     expect(schema.usersRelations).toBeDefined();
     expect(schema.rolesRelations).toBeDefined();
-    expect(schema.permissionsRelations).toBeDefined();
     expect(schema.userRolesRelations).toBeDefined();
-    expect(schema.rolePermissionsRelations).toBeDefined();
-    expect(schema.userPermissionsRelations).toBeDefined();
     expect(schema.inviteLinksRelations).toBeDefined();
     expect(schema.passkeyCredentialsRelations).toBeDefined();
     expect(schema.apiKeysRelations).toBeDefined();
