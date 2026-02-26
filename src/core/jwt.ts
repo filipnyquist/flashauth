@@ -120,8 +120,9 @@ export async function parseToken(
 
   try {
     const { payload } = await jwtVerify(token, key, {
-      // Disable built-in exp check; we validate expiration ourselves in claims.ts
-      maxTokenAge: undefined,
+      // Use large clockTolerance to skip jose's built-in exp check;
+      // we validate expiration ourselves in claims.ts
+      clockTolerance: Number.MAX_SAFE_INTEGER,
     });
 
     // Reconstruct StandardClaims from the JWT payload
