@@ -9,8 +9,14 @@
     "typescript": "^5.3.3"
   },
   "peerDependencies": {
+    "@elysiajs/opentelemetry": "^1.4.10",
     "drizzle-orm": "^0.45.1",
     "elysia": "^1.4.18"
+  },
+  "peerDependenciesMeta": {
+    "@elysiajs/opentelemetry": {
+      "optional": true
+    }
   },
   "exports": {
     ".": {
@@ -29,10 +35,11 @@
     "bun",
     "security",
     "drizzle",
-    "permissions",
+    "roles",
     "passkey",
     "webauthn",
     "api-key",
+    "opentelemetry",
     "token"
   ],
   "license": "MIT",

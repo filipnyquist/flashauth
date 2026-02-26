@@ -69,6 +69,9 @@ export { generateSecret } from './core/cryptography.js';
 // JWT utilities (for advanced usage)
 export { base64urlEncode, base64urlDecode } from './core/jwt.js';
 
+// OpenTelemetry trace plugin
+export { flashAuthTrace, type FlashAuthTraceConfig } from './plugins/trace.js';
+
 // Authentication plugins
 // flashAuthCore: lightweight plugin with context & macros only (use in sub-routes)
 // flashAuthRoutes: plugin with /auth routes only (use once in main app)
