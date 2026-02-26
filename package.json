@@ -24,13 +24,15 @@
   },
   "keywords": [
     "authentication",
-    "paseto",
+    "jwt",
     "elysia",
     "bun",
     "security",
-    "jwt-alternative",
+    "drizzle",
     "permissions",
-    "session",
+    "passkey",
+    "webauthn",
+    "api-key",
     "token"
   ],
   "license": "MIT",
