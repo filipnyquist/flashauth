@@ -8,8 +8,7 @@
  * ```typescript
  * import { Elysia } from 'elysia';
  * import { opentelemetry } from '@elysiajs/opentelemetry';
- * import { flashAuth } from 'flashauth';
- * import { flashAuthTrace } from 'flashauth/trace';
+ * import { flashAuth, flashAuthTrace } from 'flashauth';
  *
  * const app = new Elysia()
  *   .use(opentelemetry())
@@ -36,6 +35,19 @@ export interface FlashAuthTraceConfig {
 }
 
 /**
+ * Eagerly attempt to load the OpenTelemetry API module.
+ * Resolves to the module or null if not available.
+ */
+let _otelApi: any = null;
+const _otelReady: Promise<void> = import('@opentelemetry/api')
+  .then((mod) => { _otelApi = mod; })
+  .catch(() => { _otelApi = null; });
+
+function getOtelApi(): any {
+  return _otelApi;
+}
+
+/**
  * Create FlashAuth OpenTelemetry trace plugin
  *
  * This plugin hooks into the Elysia request lifecycle to add tracing
@@ -53,14 +65,16 @@ export function flashAuthTrace(config: FlashAuthTraceConfig = {}) {
   } = config;
 
   return new Elysia({ name: 'flashauth-trace' })
+    .onStart(async () => {
+      // Wait for the OTel import to settle before handling any requests
+      await _otelReady;
+    })
     .onAfterHandle(({ flashAuth, path, request }: any) => {
       // Only add trace attributes if flashAuth context is available
       if (!flashAuth) return;
 
       try {
-        // Try to get the current span from OpenTelemetry context
-        // This works when @elysiajs/opentelemetry is installed
-        const otel = tryGetOpenTelemetry();
+        const otel = getOtelApi();
         if (!otel) return;
 
         const span = otel.trace.getActiveSpan();
@@ -90,7 +104,7 @@ export function flashAuthTrace(config: FlashAuthTraceConfig = {}) {
     })
     .onError(({ error, path, request }: any) => {
       try {
-        const otel = tryGetOpenTelemetry();
+        const otel = getOtelApi();
         if (!otel) return;
 
         const span = otel.trace.getActiveSpan();
@@ -104,23 +118,4 @@ export function flashAuthTrace(config: FlashAuthTraceConfig = {}) {
         // Silently ignore
       }
     });
-}
-
-/**
- * Try to dynamically import the OpenTelemetry API
- * Returns null if not available
- */
-let _otelApi: any = null;
-let _otelChecked = false;
-
-function tryGetOpenTelemetry(): any {
-  if (_otelChecked) return _otelApi;
-  _otelChecked = true;
-  try {
-    // Try to require the OpenTelemetry API (it's a transitive dep of @elysiajs/opentelemetry)
-    _otelApi = require('@opentelemetry/api');
-  } catch {
-    _otelApi = null;
-  }
-  return _otelApi;
 }
