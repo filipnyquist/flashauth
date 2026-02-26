@@ -1,237 +1,235 @@
 # FlashAuth Authentication Plugin
 
-Complete user authentication plugin for FlashAuth with email/password signup, email verification, password reset, TOTP 2FA, and passkey support.
+Complete user authentication plugin for Elysia.js with email/password signup, email verification, password reset, TOTP 2FA, passkey/WebAuthn, invite links, API keys, and permission management — all backed by Drizzle ORM and PostgreSQL.
 
 ## Features
 
-- ✅ **Email/Password Authentication** - User signup and login with Bun's native Argon2id hashing
-- ✅ **Email Verification** - Secure email verification flow with time-limited tokens
-- ✅ **Password Reset** - Secure password reset flow with time-limited tokens
-- ✅ **TOTP 2FA** - Time-based One-Time Password two-factor authentication using otplib
-- ✅ **Passkey/WebAuthn** - Passwordless authentication using @simplewebauthn/server
-- ✅ **PostgreSQL Storage** - Uses Bun's built-in SQL client (Bun.SQL) for PostgreSQL
-- ✅ **Type-Safe** - Full TypeScript support
-- ✅ **Elysia Plugin** - First-class integration with Elysia.js
+- **Email/Password Authentication** — signup and login with `Bun.password` (bcrypt) hashing
+- **Email Verification** — time-limited verification tokens (24h default)
+- **Password Reset** — time-limited reset tokens (1h default)
+- **TOTP 2FA** — two-factor authentication via `otplib` with backup codes
+- **Passkey/WebAuthn** — passwordless authentication via `@simplewebauthn/server`
+- **Invite Links** — invite-only signups with optional role assignment
+- **API Keys** — long-lived JWT tokens for machine-to-machine auth
+- **Permission Management** — database-backed RBAC (roles, permissions, assignments)
+- **Drizzle ORM** — PostgreSQL storage with full relational schema
 
-## Installation
+## Two Plugins
 
-```bash
-bun add flashauth otplib @simplewebauthn/server
-```
+The auth module exports two plugins that are used together:
 
-**Note:** No additional PostgreSQL client needed! Bun has built-in PostgreSQL support via `Bun.SQL`.
+### `flashAuthCore(config)`
 
-## Quick Start
-
-```typescript
-import { Elysia } from 'elysia';
-import { FlashAuth, flashAuth, flashAuthPlugin } from 'flashauth';
-
-const auth = new FlashAuth({
-  secret: process.env.AUTH_SECRET!,
-});
-
-const app = new Elysia()
-  .use(flashAuth(auth))
-  .use(flashAuthPlugin({
-    databaseUrl: process.env.DATABASE_URL!,
-    flashAuth: auth,
-    webauthn: {
-      rpName: 'My App',
-      rpID: 'example.com',
-      origin: 'https://example.com',
-    },
-  }))
-  .listen(3000);
-```
-
-## Database Setup
-
-### 1. Create PostgreSQL Database
-
-```bash
-createdb flashauth
-```
-
-### 2. Run Migrations
-
-Use the provided SQL migration file:
-
-```sql
--- Run src/plugins/auth/migrations/001_initial.sql
-psql flashauth < src/plugins/auth/migrations/001_initial.sql
-```
-
-Or programmatically:
+Provides the `flashAuth` context and authentication macros to your routes. Use this when you need auth context in custom routes.
 
 ```typescript
-import { runMigrations } from 'flashauth';
-import { readFileSync } from 'fs';
+import { flashAuthCore } from 'flashauth';
 
-const migrationSql = readFileSync('./migrations/001_initial.sql', 'utf-8');
-await runMigrations(process.env.DATABASE_URL!, migrationSql);
+app.use(flashAuthCore({
+  flashAuth: auth,              // FlashAuth instance
+  tokenLocation: 'both',        // 'bearer' | 'cookie' | 'both'
+  cookieName: 'auth_token',
+}));
 ```
 
-## API Routes
+### `flashAuthRoutes(config)`
 
-The plugin automatically creates the following routes:
+Adds all `/auth/*` endpoints. Use once in your main app.
 
-### Authentication
+```typescript
+import { flashAuthRoutes } from 'flashauth';
 
-- `POST /auth/signup` - Register new user
-- `POST /auth/verify-email` - Verify email with token
-- `POST /auth/login` - Login with email/password
-- `POST /auth/login/2fa` - Complete login with TOTP code
-
-### Password Reset
-
-- `POST /auth/password-reset/request` - Request password reset
-- `POST /auth/password-reset/confirm` - Confirm password reset with token
-
-### Two-Factor Authentication
-
-- `POST /auth/2fa/setup` - Setup TOTP 2FA (requires auth)
-- `POST /auth/2fa/verify` - Verify and enable 2FA (requires auth)
-- `POST /auth/2fa/disable` - Disable 2FA (requires auth)
-
-### Passkey/WebAuthn
-
-- `POST /auth/passkey/register/start` - Start passkey registration (requires auth)
-- `POST /auth/passkey/register/finish` - Finish passkey registration (requires auth)
-- `POST /auth/passkey/login/start` - Start passkey login
-- `POST /auth/passkey/login/finish` - Finish passkey login
+app.use(flashAuthRoutes(config));
+```
 
 ## Configuration
 
 ```typescript
-interface AuthPluginConfig {
-  // Database connection string
-  databaseUrl: string;
+import type { AuthPluginConfig } from 'flashauth';
 
-  // FlashAuth instance
-  flashAuth: FlashAuth;
+const config: AuthPluginConfig = {
+  // Required
+  db: drizzleInstance,        // Drizzle ORM PostgreSQL instance
+  flashAuth: authInstance,    // FlashAuth instance
 
-  // WebAuthn configuration
+  // Token extraction (default: 'both')
+  tokenLocation: 'both',     // 'bearer' | 'cookie' | 'both'
+  cookieName: 'auth_token',
+  cookieSecure: true,
+  cookieHttpOnly: true,
+  cookieSameSite: 'lax',
+
+  // Email service (optional — if omitted, tokens returned in response)
+  email: {
+    sendVerification: async (email, token) => { /* ... */ },
+    sendPasswordReset: async (email, token) => { /* ... */ },
+  },
+
+  // Token expiration (seconds)
+  tokenExpiration: {
+    emailVerification: 86400,   // 24 hours
+    passwordReset: 3600,        // 1 hour
+    session: 604800,            // 7 days
+  },
+
+  // Password policy
+  security: {
+    minPasswordLength: 8,
+    requireUppercase: false,
+    requireLowercase: false,
+    requireNumber: false,
+    requireSpecialChar: false,
+  },
+
+  // Feature toggles
+  totpEnabled: true,           // Enable TOTP 2FA (default: true)
+  passkeysEnabled: false,      // Enable WebAuthn (default: false)
+  disableSignup: false,        // Block all signups (default: false)
+  inviteOnly: false,           // Require invite for signup (default: false)
+
+  // WebAuthn config (required when passkeysEnabled is true)
   webauthn: {
-    rpName: string;      // App name
-    rpID: string;        // Domain (e.g., 'example.com')
-    origin: string | string[]; // Expected origin(s)
-  };
-
-  // Optional: Email service
-  email?: {
-    sendVerification?: (email: string, token: string) => Promise<void>;
-    sendPasswordReset?: (email: string, token: string) => Promise<void>;
-  };
-
-  // Optional: Token expiration times (in seconds)
-  tokenExpiration?: {
-    emailVerification?: number; // Default: 24 hours
-    passwordReset?: number;     // Default: 1 hour
-    session?: number;           // Default: 7 days
-  };
-
-  // Optional: Security settings
-  security?: {
-    minPasswordLength?: number;    // Default: 8
-    requireUppercase?: boolean;    // Default: false
-    requireLowercase?: boolean;    // Default: false
-    requireNumber?: boolean;       // Default: false
-    requireSpecialChar?: boolean;  // Default: false
-  };
-}
+    rpName: 'My App',
+    rpID: 'example.com',
+    origin: 'https://example.com',
+  },
+};
 ```
 
-## Usage Examples
+## Routes
 
-### User Signup
+All routes are mounted under `/auth`. See the tables below for the full list.
 
-```bash
-curl -X POST http://localhost:3000/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "password123"
-  }'
-```
+### User Management
 
-### Email Verification
+| Method | Endpoint | Body | Auth | Description |
+|--------|----------|------|------|-------------|
+| POST | `/auth/signup` | `{ email, password }` | No | Register (blocked when `inviteOnly` or `disableSignup`) |
+| POST | `/auth/signup/invite` | `{ email, password, inviteToken }` | No | Register with invite token |
+| POST | `/auth/verify-email` | `{ token }` | No | Verify email address |
+| POST | `/auth/login` | `{ email, password }` | No | Login |
+| POST | `/auth/login/2fa` | `{ userId, code }` | No | Complete 2FA login |
+| POST | `/auth/password-reset/request` | `{ email }` | No | Request password reset |
+| POST | `/auth/password-reset/confirm` | `{ token, newPassword }` | No | Confirm password reset |
 
-```bash
-curl -X POST http://localhost:3000/auth/verify-email \
-  -H "Content-Type: application/json" \
-  -d '{
-    "token": "verification-token-here"
-  }'
-```
+### TOTP 2FA
 
-### Login
+| Method | Endpoint | Body | Auth |
+|--------|----------|------|------|
+| POST | `/auth/2fa/setup` | — | Yes |
+| POST | `/auth/2fa/verify` | `{ code }` | Yes |
+| POST | `/auth/2fa/disable` | — | Yes |
 
-```bash
-curl -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "password123"
-  }'
-```
+### Passkey/WebAuthn
 
-### Setup 2FA
+| Method | Endpoint | Body | Auth |
+|--------|----------|------|------|
+| POST | `/auth/passkey/register/start` | — | Yes |
+| POST | `/auth/passkey/register/finish` | `{ response }` | Yes |
+| POST | `/auth/passkey/login/start` | — | No |
+| POST | `/auth/passkey/login/finish` | `{ sessionId, response }` | No |
 
-```bash
-curl -X POST http://localhost:3000/auth/2fa/setup \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
+### Invite Links
 
-### Passkey Registration
+| Method | Endpoint | Body | Auth |
+|--------|----------|------|------|
+| POST | `/auth/invite` | `{ email?, roleId?, maxUses?, expiresAt? }` | Yes |
+| GET | `/auth/invites` | — | Yes |
+| DELETE | `/auth/invite/:id` | — | Yes |
+
+### API Keys
+
+| Method | Endpoint | Body | Auth |
+|--------|----------|------|------|
+| POST | `/auth/api-keys` | `{ name }` | Yes |
+| GET | `/auth/api-keys` | — | Yes |
+| DELETE | `/auth/api-keys/:id` | — | Yes |
+
+### Roles & Permissions
+
+| Method | Endpoint | Body | Auth |
+|--------|----------|------|------|
+| POST | `/auth/roles` | `{ name, description? }` | Yes |
+| GET | `/auth/roles` | — | No |
+| DELETE | `/auth/roles/:id` | — | Yes |
+| POST | `/auth/permissions` | `{ name, description? }` | Yes |
+| GET | `/auth/permissions` | — | No |
+| DELETE | `/auth/permissions/:id` | — | Yes |
+| POST | `/auth/users/:userId/roles` | `{ roleId }` | Yes |
+| DELETE | `/auth/users/:userId/roles/:roleId` | — | Yes |
+| POST | `/auth/users/:userId/permissions` | `{ permissionId }` | Yes |
+| DELETE | `/auth/users/:userId/permissions/:permissionId` | — | Yes |
+| GET | `/auth/users/:userId/permissions` | — | Yes |
+| POST | `/auth/roles/:roleId/permissions` | `{ permissionId }` | Yes |
+| DELETE | `/auth/roles/:roleId/permissions/:permissionId` | — | Yes |
+
+## Complete Example
 
 ```typescript
-// Client-side JavaScript
-// 1. Start registration
-const startResponse = await fetch('/auth/passkey/register/start', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
+import { Elysia } from 'elysia';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import {
+  FlashAuth,
+  flashAuthCore,
+  flashAuthRoutes,
+} from 'flashauth';
+
+const db = drizzle(process.env.DATABASE_URL!);
+const auth = new FlashAuth({
+  secret: process.env.AUTH_SECRET!,
+  rolePermissions: {
+    user: ['posts:read', 'posts:write'],
+    admin: ['*'],
   },
 });
-const { options } = await startResponse.json();
 
-// 2. Create credential using WebAuthn API
-const credential = await navigator.credentials.create({
-  publicKey: options,
-});
+const app = new Elysia()
+  .use(flashAuthCore({ flashAuth: auth }))
+  .use(flashAuthRoutes({
+    db,
+    flashAuth: auth,
+    inviteOnly: true,
+    passkeysEnabled: true,
+    webauthn: {
+      rpName: 'My App',
+      rpID: 'localhost',
+      origin: 'http://localhost:3000',
+    },
+  }))
 
-// 3. Finish registration
-const finishResponse = await fetch('/auth/passkey/register/finish', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({ response: credential }),
-});
+  // Custom protected route using macros from flashAuthCore
+  .get('/dashboard', ({ flashAuth }) => ({
+    user: flashAuth.claims?.sub,
+  }), { isAuth: true })
+
+  .listen(3000);
 ```
+
+See [`examples/auth-app.ts`](../../examples/auth-app.ts) for a complete runnable example with all configuration options documented.
 
 ## Database Schema
 
-The plugin creates the following tables:
+The plugin requires these PostgreSQL tables (managed via Drizzle ORM):
 
-- `users` - User accounts
-- `email_verification_tokens` - Email verification tokens
-- `password_reset_tokens` - Password reset tokens
-- `totp_secrets` - TOTP 2FA secrets and backup codes
-- `passkey_credentials` - WebAuthn/Passkey credentials
+- `users` — email, password hash, email verified flag
+- `roles` — named roles
+- `permissions` — named permissions
+- `user_roles` — user ↔ role assignments
+- `role_permissions` — role ↔ permission assignments
+- `user_permissions` — direct user ↔ permission assignments
+- `invite_links` — invite tokens with optional email/role/max uses/expiry
+- `passkey_credentials` — WebAuthn credentials
+- `api_keys` — named API keys (hashed)
+- `totp_secrets` — TOTP secrets and backup codes
 
-See `migrations/001_initial.sql` for the complete schema.
+Generate the schema:
 
-## Security Considerations
+```bash
+bun run generate-schema --output src/db/schema.ts
+```
 
-- **Password Hashing**: Uses Bun's native bcrypt implementation
-- **Token Generation**: Uses cryptographically secure random generation
-- **TOTP**: Standard TOTP implementation with backup codes
-- **WebAuthn**: Follows WebAuthn specification using SimpleWebAuthn
-- **Email Enumeration**: Password reset doesn't reveal if email exists
+Apply to your database:
 
-## License
-
-MIT
+```bash
+bunx drizzle-kit push
+```

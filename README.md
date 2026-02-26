@@ -1,22 +1,22 @@
 # FlashAuth
 
-**Ultra-Fast PASETO v4 Local Authentication Framework for Bun.js and Elysia.js**
+**JWT Authentication Framework for Bun.js & Elysia.js**
 
-FlashAuth is a high-performance authentication framework designed specifically for modern Bun.js + Elysia.js ecosystems. It focuses on three core pillars:
-
-1. **Raw Speed** - Optimized for Bun's performance characteristics
-2. **Security by Default** - PASETO v4 Local with XChaCha20-Poly1305
-3. **Developer Velocity** - Pure TypeScript with end-to-end type safety
+FlashAuth is a batteries-included authentication framework built for the Bun + Elysia ecosystem. It handles JWT tokens, RBAC permissions, API keys, TOTP 2FA, passkeys, invite links, and full user management — all backed by Drizzle ORM and PostgreSQL.
 
 ## Features
 
-- ✅ **PASETO v4 Local**: Secure authenticated encryption with XChaCha20-Poly1305
-- ✅ **Native Elysia Plugin**: First-class integration with Elysia.js
-- ✅ **Permission System**: Built-in RBAC with wildcard support
-- ✅ **Type-Safe**: Full TypeScript support with strict mode
-- ✅ **Zero Dependencies** (runtime): Uses Bun's crypto + [@noble/ciphers](https://github.com/paulmillr/noble-ciphers)
-- ✅ **Token Revocation**: Per-token and per-user revocation support
-- ✅ **Caching Layer**: Optional LRU cache for validated tokens
+- **JWT Tokens** — HS256 signing via the `jose` library, with access, refresh, and API key token types
+- **Elysia Plugin** — native plugin with route macros (`isAuth`, `requirePermission`, `requireRole`, etc.)
+- **Permission System** — `resource:action` format with wildcard support and role-based expansion
+- **Drizzle ORM** — accepts any Drizzle PostgreSQL instance; includes schema generation CLI
+- **Full Auth Routes** — signup, login, email verification, password reset, 2FA, passkeys
+- **API Keys** — long-lived JWT tokens without expiration
+- **Invite Links** — invite-only signups with optional role assignment
+- **TOTP 2FA** — time-based one-time passwords with backup codes (via `otplib`)
+- **Passkey/WebAuthn** — passwordless authentication (via `@simplewebauthn/server`)
+- **Token Revocation** — per-token and per-user revocation with optional LRU cache
+- **Type-Safe** — full TypeScript with strict mode
 
 ## Installation
 
@@ -24,32 +24,40 @@ FlashAuth is a high-performance authentication framework designed specifically f
 bun add flashauth
 ```
 
-**Requirements:**
-- Bun 1.1+
-- Elysia 1.0+ (peer dependency)
+**Peer dependencies:**
+
+```bash
+bun add elysia drizzle-orm
+```
+
+**Optional (for full auth plugin features):**
+
+```bash
+bun add otplib @simplewebauthn/server
+```
+
+**Requirements:** Bun 1.1+
 
 ## Quick Start
 
-```typescript
-import { Elysia } from 'elysia';
-import { FlashAuth, flashAuthCore } from 'flashauth';
+A minimal example with no database — just token creation, validation, and permission checks:
 
-// Initialize FlashAuth
+```typescript
+import { Elysia, t } from 'elysia';
+import { FlashAuth, flashAuth } from 'flashauth';
+
 const auth = new FlashAuth({
-  secret: FlashAuth.generateSecret(),
+  secret: process.env.AUTH_SECRET ?? FlashAuth.generateSecret(),
   rolePermissions: {
-    'user': ['posts:read', 'posts:write'],
-    'admin': ['*'], // All permissions
+    user: ['posts:read', 'posts:write'],
+    admin: ['*'],
   },
 });
 
-// Create Elysia app with FlashAuth core (context & macros)
 const app = new Elysia()
-  .use(flashAuthCore({ flashAuth: auth }))
-  
-  // Public login endpoint
+  .use(flashAuth(auth))
+
   .post('/login', async ({ body }) => {
-    // Validate credentials...
     const token = await auth
       .createToken()
       .subject('user:123')
@@ -57,559 +65,563 @@ const app = new Elysia()
       .roles(['user'])
       .expiresIn('1h')
       .build();
-    
     return { token };
-  })
-  
-  // Protected endpoint - requires authentication
-  .get('/profile', ({ flashAuth }) => {
-    return {
-      user: flashAuth.claims?.sub,
-      email: flashAuth.claims?.email,
-    };
   }, {
-    isAuth: true,  // Macro: requires authentication
+    body: t.Object({
+      email: t.String({ format: 'email' }),
+      password: t.String({ minLength: 8 }),
+    }),
   })
-  
-  // Protected endpoint - requires posts:read permission
-  .get('/posts', ({ flashAuth }) => {
-    return {
-      posts: [],
-      user: flashAuth.claims?.sub,
-    };
-  }, {
-    requirePermission: 'posts:read',  // Macro: requires specific permission
+
+  .get('/profile', ({ flashAuth }) => ({
+    userId: flashAuth.claims?.sub,
+    roles: flashAuth.claims?.roles,
+    permissions: flashAuth.claims?.perms,
+  }), { isAuth: true })
+
+  .get('/posts', () => ({ posts: [] }), {
+    requirePermission: 'posts:read',
   })
-  
+
   .listen(3000);
 ```
 
+See [`examples/basic-app.ts`](examples/basic-app.ts) for a complete runnable version.
+
 ## Core Concepts
 
-### PASETO v4 Local
+### JWT Tokens
 
-FlashAuth uses PASETO v4 Local tokens for authentication:
-- **Format**: `v4.local.{payload}.{footer}`
-- **Encryption**: XChaCha20-Poly1305 (via @noble/ciphers)
-- **Random**: Bun's `crypto.getRandomValues`
-- **No JWT vulnerabilities**: Algorithm fixed by version, no key confusion
-
-### Token Structure
+FlashAuth uses **HS256** symmetric signing via the [`jose`](https://github.com/panva/jose) library. Tokens are standard JWTs and can be inspected with any JWT tool.
 
 ```typescript
-interface StandardClaims {
-  sub: string;         // Subject (user ID) - required
-  exp: number;         // Expiration timestamp - required
-  iat: number;         // Issued at timestamp
-  iss?: string;        // Issuer
-  aud?: string[];      // Audience
-  nbf?: number;        // Not before
-  jti?: string;        // Token ID for revocation
-  roles?: string[];    // User roles
-  perms?: string[];    // Permissions (auto-expanded from roles)
-  [key: string]: any;  // Custom claims
-}
+// Generate a cryptographically secure secret
+const secret = FlashAuth.generateSecret(); // base64url-encoded 32-byte key
+
+const auth = new FlashAuth({ secret });
 ```
+
+### Token Types
+
+| Type | Description | Expiration |
+|------|-------------|------------|
+| `access` | Short-lived session token | Required |
+| `refresh` | Used to obtain new access tokens | Required |
+| `api_key` | Long-lived machine-to-machine token | Optional |
 
 ### Permission System
 
-Permissions use dot-notation with wildcard support:
+Permissions use a `resource:action` format with wildcard support:
 
 ```typescript
-// Exact match
-'posts:read'   // Can read posts
-'posts:write'  // Can write posts
-
-// Wildcard match
-'posts:*'      // All post operations
-'admin:*'      // All admin operations
-'*'            // Super admin (all permissions)
+'posts:read'    // exact match
+'posts:*'       // all post operations
+'*'             // super admin — matches everything
 ```
 
-**Permission checks:**
-```typescript
-const claims = await auth.validateToken(token);
+Roles map to permissions and are auto-expanded when creating tokens:
 
-claims.hasPermission('posts:write');              // Single permission
-claims.hasAnyPermission(['posts:read', 'admin:*']); // Any of multiple
-claims.hasAllPermissions(['posts:read', 'posts:write']); // All required
+```typescript
+const auth = new FlashAuth({
+  secret,
+  rolePermissions: {
+    user: ['posts:read', 'posts:write'],
+    moderator: ['posts:read', 'posts:write', 'posts:delete', 'users:read'],
+    admin: ['*'],
+  },
+});
+
+// Permissions are expanded from roles automatically
+const token = await auth
+  .createToken()
+  .subject('user:123')
+  .roles(['user'])    // → perms: ['posts:read', 'posts:write']
+  .expiresIn('1h')
+  .build();
 ```
 
 ## API Reference
 
 ### FlashAuth Class
 
-#### Constructor
-
 ```typescript
+import { FlashAuth } from 'flashauth';
+
 const auth = new FlashAuth({
-  secret: Uint8Array | string,     // 32-byte secret key
-  rolePermissions?: RolePermissions, // Role-to-permission mapping
-  revocationStore?: RevocationStore, // Custom revocation store
-  enableCache?: boolean,             // Enable token caching (default: true)
-  cache?: {
-    maxSize?: number,                // Max cached tokens (default: 10000)
-    ttl?: number,                    // Cache TTL in ms (default: 300000)
-  },
+  secret: string | Uint8Array,       // signing key
+  rolePermissions?: RolePermissions, // role → permissions mapping
+  revocationStore?: RevocationStore, // custom store (default: in-memory)
+  enableCache?: boolean,             // default: true
+  cache?: { maxSize?: number; ttl?: number },
 });
+
+// Create tokens
+auth.createToken(claims?)                    // → TokenBuilder
+
+// Validate tokens
+await auth.validateToken(token, options?)    // → Claims
+await auth.isTokenValid(token)              // → boolean
+
+// Revoke tokens
+await auth.revokeToken(jti, expiresAt)
+await auth.revokeUser(userId)
+
+// Role permissions
+auth.getRolePermissions()
+auth.setRolePermissions(rolePermissions)
+
+// Static utilities
+FlashAuth.generateSecret()      // base64url string
+FlashAuth.generateSecretHex()   // hex string
 ```
 
-#### Token Creation
+### TokenBuilder (Fluent API)
 
 ```typescript
-// Fluent API
 const token = await auth
   .createToken()
-  .subject('user:123')
-  .issuer('my-app')
-  .audience(['service-a', 'service-b'])
-  .roles(['user', 'moderator'])
-  .permissions(['custom:permission'])
-  .claim('email', 'user@example.com')
-  .expiresIn('1h')  // or '30m', '7d', '1w'
-  .tokenId('unique-id')
-  .footer('optional-footer')
-  .build();
-
-// Direct
-const token = await auth.createToken({
-  sub: 'user:123',
-  exp: Math.floor(Date.now() / 1000) + 3600,
-  roles: ['user'],
-}).build();
+  .subject('user:123')              // required
+  .issuer('my-app')                 // optional
+  .audience('api')                  // optional (string or string[])
+  .expiresIn('1h')                  // "1h", "30m", "7d", "1w"
+  .expiration(1700000000)           // or absolute Unix timestamp
+  .notBefore(1699999000)            // optional
+  .tokenId('jti-123')              // for revocation
+  .type('access')                   // 'access' | 'refresh' | 'api_key'
+  .apiKey()                         // shorthand for type('api_key')
+  .roles(['user', 'moderator'])     // auto-expands to permissions
+  .permissions(['custom:perm'])     // explicit permissions (merged with role perms)
+  .claim('email', 'user@example.com') // custom claims
+  .build();                         // → Promise<string>
 ```
 
-#### Token Validation
+### Claims Class
+
+Returned by `auth.validateToken()`. Includes permission/role helper methods:
 
 ```typescript
-const claims = await auth.validateToken(token, {
-  clockSkew: 5,                    // Clock skew tolerance (seconds)
-  validateExpiry: true,            // Validate expiration (default: true)
-  requiredIssuer: 'my-app',       // Required issuer
-  requiredAudience: 'service-a',  // Required audience
-});
+const claims = await auth.validateToken(token);
+
+claims.sub        // subject (user ID)
+claims.exp        // expiration (Unix timestamp)
+claims.iat        // issued at
+claims.roles      // string[]
+claims.perms      // string[] (expanded from roles)
+claims.type       // 'access' | 'refresh' | 'api_key'
+
+// Permission checks
+claims.hasPermission('posts:write')              // boolean
+claims.hasAnyPermission(['posts:read', 'admin:*'])
+claims.hasAllPermissions(['posts:read', 'posts:write'])
+
+// Role checks
+claims.hasRole('admin')                          // boolean
+claims.hasAnyRole(['admin', 'moderator'])
+
+// Time checks
+claims.isExpired(clockSkew?)
+claims.isNotYetValid(clockSkew?)
+
+// Custom claims
+claims.email  // any custom claim set via .claim()
 ```
 
-#### Token Revocation
+## Elysia Plugin
+
+FlashAuth provides three plugins at different levels of functionality:
+
+### `flashAuth` — Lightweight Plugin
+
+Adds token validation context and route macros. No database required.
 
 ```typescript
-// Revoke by token ID
-await auth.revokeToken(jti, expiresAt);
+import { FlashAuth, flashAuth } from 'flashauth';
 
-// Revoke all user tokens
-await auth.revokeUser(userId);
+const auth = new FlashAuth({ secret });
 
-// Check if token is valid
-const isValid = await auth.isTokenValid(token);
+const app = new Elysia()
+  .use(flashAuth(auth, {
+    tokenLocation: 'bearer',  // 'bearer' | 'cookie' (default: 'bearer')
+    cookieName: 'auth_token', // cookie name when using cookie mode
+  }));
 ```
 
-#### Key Generation
+### `flashAuthCore` — Core Plugin (for sub-routes)
 
-```typescript
-// Generate 32-byte secret
-const secret = FlashAuth.generateSecret();       // Uint8Array
-const secretHex = FlashAuth.generateSecretHex(); // Hex string
-```
-
-### Elysia Plugins
-
-FlashAuth provides two separate plugins for Elysia:
-
-#### flashAuthCore - Core Plugin (Context & Macros)
-
-Use this in your main app and sub-routes to get access to the `flashAuth` context and authentication macros.
+Same context and macros as `flashAuth`, but supports `'both'` token location (bearer + cookie). Use in sub-routes alongside `flashAuthRoutes`.
 
 ```typescript
 import { flashAuthCore } from 'flashauth';
 
-// Create plugin instance (can be reused across sub-routes)
-const authCore = flashAuthCore({
+app.use(flashAuthCore({
   flashAuth: auth,
-  tokenLocation: 'bearer',  // or 'cookie'
-  cookieName: 'auth_token', // for cookie mode
-});
-
-// Use in main app
-app.use(authCore);
-
-// Use in sub-routes (defined in separate files)
-const apiRoutes = new Elysia({ prefix: '/api' })
-  .use(authCore)
-  .get('/protected', ({ flashAuth }) => flashAuth.claims, {
-    isAuth: true,
-  });
+  tokenLocation: 'both',   // 'bearer' | 'cookie' | 'both' (default: 'both')
+  cookieName: 'auth_token',
+}));
 ```
 
-**Available Macros:**
-- `isAuth: boolean` - Require authentication
-- `requirePermission: string` - Require specific permission
-- `requireAnyPermission: string[]` - Require any of multiple permissions
-- `requireAllPermissions: string[]` - Require all permissions
-- `requireRole: string` - Require specific role
-- `requireAnyRole: string[]` - Require any of multiple roles
+### `flashAuthRoutes` — Full Auth Routes
 
-**Example using macros:**
-
-```typescript
-app.use(authCore)
-  // Require authentication
-  .get('/profile', ({ flashAuth }) => flashAuth.claims, {
-    isAuth: true,
-  })
-  
-  // Require specific permission
-  .get('/posts', () => getPosts(), {
-    requirePermission: 'posts:read',
-  })
-  
-  // Require any of multiple permissions
-  .delete('/posts/:id', ({ params }) => deletePost(params.id), {
-    requireAnyPermission: ['posts:delete', 'admin:*'],
-  })
-  
-  // Require all permissions
-  .get('/dashboard', () => getDashboard(), {
-    requireAllPermissions: ['users:read', 'posts:write'],
-  })
-  
-  // Require specific role
-  .get('/admin', () => getAdminPanel(), {
-    requireRole: 'admin',
-  });
-```
-
-#### flashAuthRoutes - Authentication Routes Plugin
-
-Use this ONCE in your main app to add `/auth/*` endpoints for user signup, login, 2FA, and passkeys.
+Adds complete `/auth/*` endpoints for signup, login, 2FA, passkeys, invites, API keys, and permission management. Requires a Drizzle database.
 
 ```typescript
 import { flashAuthCore, flashAuthRoutes } from 'flashauth';
 
-const app = new Elysia()
-  // Add core plugin (context & macros)
+app
   .use(flashAuthCore({ flashAuth: auth }))
-  
-  // Add authentication routes (/auth/signup, /auth/login, etc.)
   .use(flashAuthRoutes({
+    db,                        // Drizzle ORM instance
     flashAuth: auth,
-    databaseUrl: process.env.DATABASE_URL!,
-    webauthn: {
+    tokenLocation: 'both',
+    cookieName: 'auth_token',
+    email: {
+      sendVerification: async (email, token) => { /* send email */ },
+      sendPasswordReset: async (email, token) => { /* send email */ },
+    },
+    tokenExpiration: {
+      emailVerification: 86400,  // 24h (default)
+      passwordReset: 3600,       // 1h (default)
+      session: 604800,           // 7d (default)
+    },
+    security: {
+      minPasswordLength: 8,
+    },
+    totpEnabled: true,          // default: true
+    passkeysEnabled: false,     // default: false
+    inviteOnly: false,          // default: false
+    webauthn: {                 // required when passkeysEnabled is true
       rpName: 'My App',
       rpID: 'example.com',
       origin: 'https://example.com',
     },
-    passkeysEnabled: true,
-  }))
-  
-  .listen(3000);
+  }));
 ```
 
-**Provided Routes:**
-- `POST /auth/signup` - User registration
-- `POST /auth/verify-email` - Email verification
-- `POST /auth/login` - User login
-- `POST /auth/login/2fa` - 2FA login
-- `POST /auth/password-reset/request` - Request password reset
-- `POST /auth/password-reset/confirm` - Confirm password reset
-- `POST /auth/2fa/setup` - Setup 2FA (requires auth)
-- `POST /auth/2fa/verify` - Verify 2FA (requires auth)
-- `POST /auth/2fa/disable` - Disable 2FA (requires auth)
-- `POST /auth/passkey/register/start` - Start passkey registration (requires auth)
-- `POST /auth/passkey/register/finish` - Finish passkey registration (requires auth)
-- `POST /auth/passkey/login/start` - Start passkey login
-- `POST /auth/passkey/login/finish` - Finish passkey login
+### Token Extraction
 
-#### Using with Sub-Routes
+When `tokenLocation` is `'both'` (default for core/routes plugins), tokens are extracted in order:
 
-When organizing routes in separate files, use `flashAuthCore` in each sub-route module:
+1. `Authorization: Bearer <token>` header
+2. Cookie (default name: `auth_token`)
+
+### Route Macros
+
+All plugins provide these Elysia macros:
 
 ```typescript
-// routes/api.ts
-import { Elysia } from 'elysia';
-import { authCore } from './auth.js'; // Shared auth core instance
-
-export const apiRoutes = new Elysia({ prefix: '/api' })
-  .use(authCore) // Get flashAuth context and macros
-  .get('/protected', ({ flashAuth }) => flashAuth.claims, {
-    isAuth: true,
-  });
-
-// routes/users.ts
-import { Elysia } from 'elysia';
-import { authCore } from './auth.js';
-
-export const userRoutes = new Elysia({ prefix: '/users' })
-  .use(authCore) // Get flashAuth context and macros
-  .get('/', () => getUsers(), {
-    requirePermission: 'users:read',
-  });
-
-// main.ts
-import { Elysia } from 'elysia';
-import { flashAuthCore, flashAuthRoutes } from 'flashauth';
-import { apiRoutes } from './routes/api.js';
-import { userRoutes } from './routes/users.js';
-
-const app = new Elysia()
-  .use(flashAuthCore({ flashAuth: auth }))  // Main app uses core plugin
-  .use(flashAuthRoutes({ flashAuth: auth, databaseUrl: '...' }))  // Add /auth routes once
-  .use(apiRoutes)   // Mount sub-routes
-  .use(userRoutes)  // Mount sub-routes
-  .listen(3000);
-```
-
-#### Legacy: Permission Guards (Deprecated)
-
-The following guard functions are still available but deprecated in favor of macros:
-
-```typescript
-import {
-  requireAuth,
-  requirePermission,
-  requireAnyPermission,
-  requireAllPermissions,
-  requireRole,
-  requireAnyRole,
-} from 'flashauth';
-
 // Require authentication
-app.use(requireAuth())
-  .get('/profile', ({ flashAuth }) => flashAuth.claims);
+.get('/profile', handler, { isAuth: true })
 
 // Require specific permission
-app.use(requirePermission('posts:write'))
-  .post('/posts', ({ body }) => createPost(body));
+.get('/posts', handler, { requirePermission: 'posts:read' })
 
 // Require any of multiple permissions
-app.use(requireAnyPermission(['posts:delete', 'admin:*']))
-  .delete('/posts/:id', ({ params }) => deletePost(params.id));
+.delete('/posts/:id', handler, {
+  requireAnyPermission: ['posts:delete', 'admin:*'],
+})
 
 // Require all permissions
-app.use(requireAllPermissions(['users:read', 'posts:write']))
-  .get('/dashboard', () => getDashboard());
+.get('/dashboard', handler, {
+  requireAllPermissions: ['users:read', 'posts:read'],
+})
 
 // Require specific role
-app.use(requireRole('admin'))
-  .get('/admin', () => getAdminPanel());
+.get('/admin', handler, { requireRole: 'admin' })
 
-// Require any role
-app.use(requireAnyRole(['admin', 'moderator']))
-  .get('/moderation', () => getModerationPanel());
+// Require any of multiple roles
+.get('/mod', handler, { requireAnyRole: ['admin', 'moderator'] })
 ```
 
-#### Context Injection
+### FlashAuth Context
 
-All routes have access to `flashAuth` context:
+Every route gets a `flashAuth` context object:
 
 ```typescript
-app.get('/protected', ({ flashAuth }) => {
-  // Access claims
-  const userId = flashAuth.claims?.sub;
-  const email = flashAuth.claims?.email;
-  
-  // Check permissions
-  if (flashAuth.hasPermission('admin:*')) {
-    // Admin access
-  }
-  
-  // Check roles
-  if (flashAuth.hasRole('moderator')) {
-    // Moderator access
-  }
-  
-  // Revoke current token
-  await flashAuth.revokeToken();
-  
-  return { userId, email };
-});
+.get('/example', ({ flashAuth }) => {
+  flashAuth.claims           // Claims | null
+  flashAuth.token            // string | null
+  flashAuth.hasPermission('posts:read')
+  flashAuth.hasAnyPermission(['a', 'b'])
+  flashAuth.hasAllPermissions(['a', 'b'])
+  flashAuth.hasRole('admin')
+  flashAuth.hasAnyRole(['admin', 'mod'])
+  await flashAuth.revokeToken()  // revoke current token
+})
 ```
 
-## Advanced Usage
+## Database Setup
 
-### Role-Based Access Control
+### Drizzle ORM Schema
+
+FlashAuth provides a complete Drizzle ORM schema for PostgreSQL. Tables: `users`, `roles`, `permissions`, `user_roles`, `role_permissions`, `user_permissions`, `invite_links`, `passkey_credentials`, `api_keys`, `totp_secrets`.
 
 ```typescript
-const auth = new FlashAuth({
-  secret: process.env.AUTH_SECRET!,
-  rolePermissions: {
-    'user': [
-      'posts:read',
-      'posts:write',
-      'profile:read',
-      'profile:write',
-    ],
-    'moderator': [
-      'posts:read',
-      'posts:write',
-      'posts:delete',
-      'users:read',
-      'comments:delete',
-    ],
-    'admin': ['*'], // All permissions
-  },
-});
+import { drizzle } from 'drizzle-orm/node-postgres';
+import * as schema from 'flashauth/schema'; // or generate your own
 
-// Permissions are automatically expanded from roles
-const token = await auth
-  .createToken()
-  .subject('user:123')
-  .roles(['user', 'moderator'])
-  .expiresIn('1h')
-  .build();
-
-// Token will have permissions from both user and moderator roles
+const db = drizzle(process.env.DATABASE_URL!, { schema });
 ```
 
-### Custom Claims
+### Schema Generation CLI
 
-```typescript
-const token = await auth
-  .createToken()
-  .subject('user:123')
-  .claim('email', 'user@example.com')
-  .claim('organization', 'org:456')
-  .claim('mfaVerified', true)
-  .claim('metadata', { theme: 'dark' })
-  .expiresIn('1h')
-  .build();
-
-const claims = await auth.validateToken(token);
-console.log(claims.email);         // 'user@example.com'
-console.log(claims.organization);   // 'org:456'
-console.log(claims.mfaVerified);    // true
-```
-
-### Custom Revocation Store
-
-```typescript
-import { RevocationStore } from 'flashauth';
-
-class RedisRevocationStore implements RevocationStore {
-  async revoke(jti: string, expiresAt: number): Promise<void> {
-    // Store in Redis with TTL
-    await redis.setex(`revoked:${jti}`, expiresAt - Date.now() / 1000, '1');
-  }
-  
-  async isRevoked(jti: string): Promise<boolean> {
-    return await redis.exists(`revoked:${jti}`) === 1;
-  }
-  
-  async revokeUser(userId: string): Promise<void> {
-    await redis.sadd('revoked:users', userId);
-  }
-  
-  async isUserRevoked(userId: string): Promise<boolean> {
-    return await redis.sismember('revoked:users', userId) === 1;
-  }
-  
-  async cleanup(): Promise<void> {
-    // Redis handles TTL automatically
-  }
-}
-
-const auth = new FlashAuth({
-  secret: process.env.AUTH_SECRET!,
-  revocationStore: new RedisRevocationStore(),
-});
-```
-
-## Security Considerations
-
-### Secret Key Management
-
-```typescript
-// ✅ DO: Use environment variables
-const auth = new FlashAuth({
-  secret: process.env.AUTH_SECRET!, // 32-byte hex string
-});
-
-// ✅ DO: Generate secure secrets
-const secret = FlashAuth.generateSecretHex();
-console.log('Add to .env:', secret);
-
-// ❌ DON'T: Hard-code secrets
-const auth = new FlashAuth({
-  secret: 'my-secret-key', // INSECURE!
-});
-```
-
-### Token Expiration
-
-```typescript
-// Short-lived access tokens
-const accessToken = await auth
-  .createToken()
-  .subject(userId)
-  .expiresIn('15m')
-  .build();
-
-// Long-lived refresh tokens (store separately)
-const refreshToken = await auth
-  .createToken()
-  .subject(userId)
-  .claim('purpose', 'refresh')
-  .expiresIn('30d')
-  .build();
-// Note: This code must be inside an async function or top-level for-await context.
-```
-
-### Permission Validation
-
-```typescript
-// Always validate permissions on the server
-app.use(requirePermission('posts:delete'))
-  .delete('/posts/:id', async ({ params, flashAuth }) => {
-    // Additional checks
-    const post = await getPost(params.id);
-    if (post.authorId !== flashAuth.claims?.sub) {
-      // User can only delete their own posts
-      throw new Error('Forbidden');
-    }
-    
-    await deletePost(params.id);
-    return { success: true };
-  });
-```
-
-## Performance
-
-FlashAuth is designed for high performance:
-
-- **Token Creation**: Asynchronous, <1ms on modern hardware
-- **Token Validation**: Cached tokens return instantly
-- **Permission Checks**: O(1) for exact match, O(n) for wildcard
-- **Memory**: <5MB for typical deployments with 10k cached tokens
-
-## Testing
+Generate the schema file for your project:
 
 ```bash
-# Run all tests
-bun test
+# Print TypeScript schema to stdout
+bun run generate-schema
 
-# Run specific test file
-bun test tests/unit/paseto.test.ts
+# Write to a file
+bun run generate-schema --output src/db/schema.ts
 
-# Watch mode
-bun test --watch
+# Generate raw SQL CREATE TABLE statements
+bun run generate-schema --sql
 ```
+
+### Migration with drizzle-kit
+
+After generating or importing the schema:
+
+```bash
+bunx drizzle-kit push    # apply schema to database
+bunx drizzle-kit generate  # generate migration files
+```
+
+## Auth Routes
+
+When using `flashAuthRoutes`, these endpoints are added automatically:
+
+### User Management
+
+| Method | Endpoint | Body | Auth | Description |
+|--------|----------|------|------|-------------|
+| POST | `/auth/signup` | `{ email, password }` | No | Register (blocked when `inviteOnly`) |
+| POST | `/auth/signup/invite` | `{ email, password, inviteToken }` | No | Register with invite |
+| POST | `/auth/verify-email` | `{ token }` | No | Verify email address |
+| POST | `/auth/login` | `{ email, password }` | No | Login (returns `requiresTOTP` if 2FA enabled) |
+| POST | `/auth/login/2fa` | `{ userId, code }` | No | Complete login with TOTP/backup code |
+| POST | `/auth/password-reset/request` | `{ email }` | No | Request password reset |
+| POST | `/auth/password-reset/confirm` | `{ token, newPassword }` | No | Confirm password reset |
+
+### Two-Factor Authentication
+
+| Method | Endpoint | Body | Auth | Description |
+|--------|----------|------|------|-------------|
+| POST | `/auth/2fa/setup` | — | Yes | Generate TOTP secret + QR code |
+| POST | `/auth/2fa/verify` | `{ code }` | Yes | Enable 2FA by verifying a TOTP code |
+| POST | `/auth/2fa/disable` | — | Yes | Disable 2FA |
+
+### Passkey/WebAuthn
+
+| Method | Endpoint | Body | Auth | Description |
+|--------|----------|------|------|-------------|
+| POST | `/auth/passkey/register/start` | — | Yes | Start passkey registration |
+| POST | `/auth/passkey/register/finish` | `{ response }` | Yes | Finish passkey registration |
+| POST | `/auth/passkey/login/start` | — | No | Start passkey login |
+| POST | `/auth/passkey/login/finish` | `{ sessionId, response }` | No | Finish passkey login |
+
+### Invite Links
+
+| Method | Endpoint | Body | Auth | Description |
+|--------|----------|------|------|-------------|
+| POST | `/auth/invite` | `{ email?, roleId?, maxUses?, expiresAt? }` | Yes | Create invite |
+| GET | `/auth/invites` | — | Yes | List your invites |
+| DELETE | `/auth/invite/:id` | — | Yes | Delete an invite |
+
+### API Keys
+
+| Method | Endpoint | Body | Auth | Description |
+|--------|----------|------|------|-------------|
+| POST | `/auth/api-keys` | `{ name }` | Yes | Create API key |
+| GET | `/auth/api-keys` | — | Yes | List your API keys |
+| DELETE | `/auth/api-keys/:id` | — | Yes | Delete an API key |
+
+### Roles & Permissions
+
+| Method | Endpoint | Body | Auth | Description |
+|--------|----------|------|------|-------------|
+| POST | `/auth/roles` | `{ name, description? }` | Yes | Create role |
+| GET | `/auth/roles` | — | No | List roles |
+| DELETE | `/auth/roles/:id` | — | Yes | Delete role |
+| POST | `/auth/permissions` | `{ name, description? }` | Yes | Create permission |
+| GET | `/auth/permissions` | — | No | List permissions |
+| DELETE | `/auth/permissions/:id` | — | Yes | Delete permission |
+| POST | `/auth/users/:userId/roles` | `{ roleId }` | Yes | Assign role to user |
+| DELETE | `/auth/users/:userId/roles/:roleId` | — | Yes | Remove role from user |
+| POST | `/auth/users/:userId/permissions` | `{ permissionId }` | Yes | Assign permission to user |
+| DELETE | `/auth/users/:userId/permissions/:permissionId` | — | Yes | Remove permission from user |
+| GET | `/auth/users/:userId/permissions` | — | Yes | Get user permissions |
+| POST | `/auth/roles/:roleId/permissions` | `{ permissionId }` | Yes | Assign permission to role |
+| DELETE | `/auth/roles/:roleId/permissions/:permissionId` | — | Yes | Remove permission from role |
+
+## Invite Links
+
+Use invite links for invite-only signups or to assign roles on registration:
+
+```typescript
+const app = new Elysia()
+  .use(flashAuthCore({ flashAuth: auth }))
+  .use(flashAuthRoutes({
+    db,
+    flashAuth: auth,
+    inviteOnly: true,  // block POST /auth/signup
+  }));
+```
+
+**Creating invites** (authenticated):
+
+```bash
+curl -X POST http://localhost:3000/auth/invite \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "new@example.com", "roleId": "role-uuid", "maxUses": 1}'
+```
+
+**Signing up with an invite:**
+
+```bash
+curl -X POST http://localhost:3000/auth/signup/invite \
+  -H "Content-Type: application/json" \
+  -d '{"email": "new@example.com", "password": "securepass", "inviteToken": "<token>"}'
+```
+
+## API Keys
+
+API keys are long-lived JWT tokens with `type: 'api_key'` and no expiration. They work anywhere a regular token is accepted.
+
+**Without database** (lightweight plugin):
+
+```typescript
+const apiKey = await auth
+  .createToken()
+  .subject('user:123')
+  .apiKey()
+  .roles(['user'])
+  .claim('name', 'my-api-key')
+  .build();
+```
+
+**With database** (auth routes plugin):
+
+```bash
+# Create
+curl -X POST http://localhost:3000/auth/api-keys \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "CI Pipeline"}'
+
+# List
+curl http://localhost:3000/auth/api-keys \
+  -H "Authorization: Bearer <token>"
+
+# Delete
+curl -X DELETE http://localhost:3000/auth/api-keys/<id> \
+  -H "Authorization: Bearer <token>"
+```
+
+## Permission Management
+
+FlashAuth supports database-backed RBAC via the auth routes plugin:
+
+```bash
+# Create a role
+curl -X POST http://localhost:3000/auth/roles \
+  -H "Authorization: Bearer <token>" \
+  -d '{"name": "editor", "description": "Can edit content"}'
+
+# Create a permission
+curl -X POST http://localhost:3000/auth/permissions \
+  -H "Authorization: Bearer <token>" \
+  -d '{"name": "posts:write"}'
+
+# Assign permission to role
+curl -X POST http://localhost:3000/auth/roles/<roleId>/permissions \
+  -H "Authorization: Bearer <token>" \
+  -d '{"permissionId": "<permId>"}'
+
+# Assign role to user
+curl -X POST http://localhost:3000/auth/users/<userId>/roles \
+  -H "Authorization: Bearer <token>" \
+  -d '{"roleId": "<roleId>"}'
+
+# Check user permissions
+curl http://localhost:3000/auth/users/<userId>/permissions \
+  -H "Authorization: Bearer <token>"
+```
+
+## Passkey/WebAuthn
+
+Enable passkey authentication for passwordless login:
+
+```typescript
+.use(flashAuthRoutes({
+  db,
+  flashAuth: auth,
+  passkeysEnabled: true,
+  webauthn: {
+    rpName: 'My Application',
+    rpID: 'example.com',
+    origin: 'https://example.com',
+  },
+}))
+```
+
+**Registration flow** (authenticated user):
+
+1. `POST /auth/passkey/register/start` → returns WebAuthn `options`
+2. Pass options to browser `navigator.credentials.create()`
+3. `POST /auth/passkey/register/finish` with the browser response
+
+**Login flow:**
+
+1. `POST /auth/passkey/login/start` → returns `sessionId` and `options`
+2. Pass options to browser `navigator.credentials.get()`
+3. `POST /auth/passkey/login/finish` with `{ sessionId, response }` → returns JWT
+
+## TOTP 2FA
+
+TOTP is enabled by default. The flow:
+
+**Setup** (authenticated user):
+
+1. `POST /auth/2fa/setup` → returns `secret`, `qrCodeUrl`, and `backupCodes`
+2. User scans QR code with authenticator app
+3. `POST /auth/2fa/verify` with `{ code }` from authenticator → enables 2FA
+
+**Login with 2FA:**
+
+1. `POST /auth/login` → response includes `{ requiresTOTP: true, userId }`
+2. `POST /auth/login/2fa` with `{ userId, code }` → returns JWT
+
+Backup codes can be used in place of TOTP codes during login.
 
 ## Examples
 
-See the `examples/` directory for complete examples:
+| File | Description |
+|------|-------------|
+| [`examples/basic-app.ts`](examples/basic-app.ts) | Minimal example — no database, bearer auth, permission macros, API keys |
+| [`examples/auth-app.ts`](examples/auth-app.ts) | Full auth plugin — all config options, invite-only mode, all endpoints |
+| [`examples/full-app.ts`](examples/full-app.ts) | Comprehensive feature showcase |
+| [`examples/subroutes-app.ts`](examples/subroutes-app.ts) | Multi-route organization with shared auth context |
 
-- [`basic-app.ts`](examples/basic-app.ts) - Minimal working example
-- More examples coming soon!
+Run any example:
+
+```bash
+bun run examples/basic-app.ts
+```
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for security policy and vulnerability reporting.
+
+**Key security properties:**
+
+- HS256 JWT signing via the audited `jose` library
+- Password hashing with `Bun.password` (bcrypt)
+- Constant-time token comparison
+- Token revocation with per-token and per-user support
+- Email enumeration prevention on password reset
+- Configurable password policies
 
 ## License
 
 MIT
-
-## Contributing
-
-Contributions are welcome! Please open an issue or PR.
-
-## Credits
-
-- Uses [@noble/ciphers](https://github.com/paulmillr/noble-ciphers) for XChaCha20-Poly1305
-- Implements [PASETO v4 specification](https://github.com/paseto-standard/paseto-spec)
-- Built for [Bun](https://bun.sh) and [Elysia.js](https://elysiajs.com)

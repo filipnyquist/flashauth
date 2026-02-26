@@ -1,5 +1,5 @@
 /**
- * FlashAuth - Ultra-Fast PASETO v4 Local Authentication Framework
+ * FlashAuth - JWT Authentication Framework for Bun.js & Elysia.js
  * @module flashauth
  */
 
