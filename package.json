@@ -47,6 +47,8 @@
   "dependencies": {
     "@noble/ciphers": "^2.1.1",
     "@simplewebauthn/server": "^13.2.2",
+    "drizzle-orm": "^0.45.1",
+    "jose": "^6.1.3",
     "otplib": "^12.0.1"
   }
 }

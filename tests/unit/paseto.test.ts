@@ -1,71 +1,68 @@
 /**
- * Tests for PASETO v4 Local implementation
+ * Tests for JWT implementation
  */
 
 import { describe, test, expect } from 'bun:test';
-import { createToken, parseToken, base64urlEncode, base64urlDecode } from '../../src/core/paseto.js';
-import { generateSecret } from '../../src/core/cryptography.js';
+import { createToken, parseToken, base64urlEncode, base64urlDecode, generateSecret } from '../../src/core/jwt.js';
 import type { StandardClaims } from '../../src/core/claims.js';
 
-describe('PASETO v4 Local', () => {
+describe('JWT', () => {
   test('should create and parse a token', async () => {
-    const key = generateSecret();
+    const secret = generateSecret();
     const claims: StandardClaims = {
       sub: 'user:123',
       exp: Math.floor(Date.now() / 1000) + 3600,
       iat: Math.floor(Date.now() / 1000),
     };
 
-    const token = await createToken(claims, key);
-    expect(token).toStartWith('v4.local.');
+    const token = await createToken(claims, secret);
+    // JWT tokens have 3 dot-separated parts
+    expect(token.split('.').length).toBe(3);
 
-    const parsed = await parseToken(token, key);
+    const parsed = await parseToken(token, secret);
     expect(parsed.claims.sub).toBe(claims.sub);
     expect(parsed.claims.exp).toBe(claims.exp);
     expect(parsed.claims.iat).toBe(claims.iat);
   });
 
-  test('should create token with footer', async () => {
-    const key = generateSecret();
+  test('should create token without expiration (API key)', async () => {
+    const secret = generateSecret();
     const claims: StandardClaims = {
       sub: 'user:123',
-      exp: Math.floor(Date.now() / 1000) + 3600,
       iat: Math.floor(Date.now() / 1000),
+      type: 'api_key',
     };
-    const footer = 'test-footer';
 
-    const token = await createToken(claims, key, footer);
-    expect(token).toStartWith('v4.local.');
-    expect(token.split('.').length).toBe(4);
-
-    const parsed = await parseToken(token, key);
+    const token = await createToken(claims, secret);
+    const parsed = await parseToken(token, secret);
     expect(parsed.claims.sub).toBe(claims.sub);
-    expect(parsed.footer).toBe(footer);
+    expect(parsed.claims.exp).toBeUndefined();
+    expect(parsed.claims.type).toBe('api_key');
   });
 
   test('should fail with wrong key', async () => {
-    const key1 = generateSecret();
-    const key2 = generateSecret();
+    const secret1 = generateSecret();
+    const secret2 = generateSecret();
     const claims: StandardClaims = {
       sub: 'user:123',
       exp: Math.floor(Date.now() / 1000) + 3600,
       iat: Math.floor(Date.now() / 1000),
     };
 
-    const token = await createToken(claims, key1);
+    const token = await createToken(claims, secret1);
     
-    await expect(parseToken(token, key2)).rejects.toThrow();
+    await expect(parseToken(token, secret2)).rejects.toThrow();
   });
 
   test('should fail with invalid token format', async () => {
-    const key = generateSecret();
+    const secret = generateSecret();
     
-    await expect(parseToken('invalid', key)).rejects.toThrow('Invalid token format');
-    await expect(parseToken('v4.public.test', key)).rejects.toThrow('Invalid token format');
+    await expect(parseToken('invalid', secret)).rejects.toThrow();
+    await expect(parseToken('not.a.valid.jwt', secret)).rejects.toThrow();
   });
 
   test('should handle custom claims', async () => {
-    const key = generateSecret();
+    const secret = generateSecret();
     const claims: StandardClaims = {
       sub: 'user:123',
       exp: Math.floor(Date.now() / 1000) + 3600,
@@ -74,8 +71,8 @@ describe('PASETO v4 Local', () => {
       roles: ['user', 'admin'],
     };
 
-    const token = await createToken(claims, key);
-    const parsed = await parseToken(token, key);
+    const token = await createToken(claims, secret);
+    const parsed = await parseToken(token, secret);
     
     expect(parsed.claims.email).toBe(claims.email);
     expect(parsed.claims.roles).toEqual(claims.roles);

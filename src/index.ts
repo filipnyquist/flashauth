@@ -9,7 +9,7 @@ export type { FlashAuthConfig } from './flashauth.js';
 
 // Core types
 export { Claims } from './core/claims.js';
-export type { StandardClaims, ValidationOptions } from './core/claims.js';
+export type { StandardClaims, ValidationOptions, TokenType } from './core/claims.js';
 
 // Token builder
 export { TokenBuilder } from './tokens/token-builder.js';
@@ -66,8 +66,8 @@ export {
 // Cryptography (for advanced usage)
 export { generateSecret } from './core/cryptography.js';
 
-// PASETO utilities (for advanced usage)
-export { base64urlEncode, base64urlDecode } from './core/paseto.js';
+// JWT utilities (for advanced usage)
+export { base64urlEncode, base64urlDecode } from './core/jwt.js';
 
 // Authentication plugins
 // flashAuthCore: lightweight plugin with context & macros only (use in sub-routes)

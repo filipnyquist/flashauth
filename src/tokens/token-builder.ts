@@ -1,12 +1,12 @@
 /**
  * FlashAuth Token Builder
- * Fluent API for creating tokens
+ * Fluent API for creating JWT tokens
  */
 
-import { createToken } from '../core/paseto.js';
+import { createToken } from '../core/jwt.js';
 import { ValidationError } from '../core/errors.js';
 import { mergePermissions } from '../utils/permission-utils.js';
-import type { StandardClaims } from '../core/claims.js';
+import type { StandardClaims, TokenType } from '../core/claims.js';
 import type { RolePermissions } from '../utils/permission-utils.js';
 
 /**
@@ -14,12 +14,11 @@ import type { RolePermissions } from '../utils/permission-utils.js';
  */
 export class TokenBuilder {
   private claims: Partial<StandardClaims> = {};
-  private key: Uint8Array;
-  private footerValue?: string;
+  private secret: string | Uint8Array;
   private rolePermissions: RolePermissions;
 
-  constructor(key: Uint8Array, rolePermissions: RolePermissions = {}) {
-    this.key = key;
+  constructor(secret: string | Uint8Array, rolePermissions: RolePermissions = {}) {
+    this.secret = secret;
     this.rolePermissions = rolePermissions;
     
     // Set default iat
@@ -85,6 +84,22 @@ export class TokenBuilder {
   }
 
   /**
+   * Set token type
+   */
+  type(type: TokenType): this {
+    this.claims.type = type;
+    return this;
+  }
+
+  /**
+   * Convenience method: set type to 'api_key' (no expiry required)
+   */
+  apiKey(): this {
+    this.claims.type = 'api_key';
+    return this;
+  }
+
+  /**
    * Set roles
    */
   roles(roles: string[]): this {
@@ -109,14 +124,6 @@ export class TokenBuilder {
   }
 
   /**
-   * Set footer
-   */
-  footer(footer: string): this {
-    this.footerValue = footer;
-    return this;
-  }
-
-  /**
    * Build the token (async)
    */
   async build(): Promise<string> {
@@ -124,7 +131,8 @@ export class TokenBuilder {
     if (!this.claims.sub) {
       throw new ValidationError('Subject (sub) is required');
     }
-    if (!this.claims.exp) {
+    // Expiration is required unless type is 'api_key'
+    if (this.claims.type !== 'api_key' && !this.claims.exp) {
       throw new ValidationError('Expiration (exp) is required');
     }
 
@@ -138,8 +146,8 @@ export class TokenBuilder {
       );
     }
 
-    // Create token (async)
-    return await createToken(this.claims as StandardClaims, this.key, this.footerValue);
+    // Create JWT token
+    return await createToken(this.claims as StandardClaims, this.secret);
   }
 
   /**

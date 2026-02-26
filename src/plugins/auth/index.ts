@@ -134,7 +134,7 @@ export function flashAuthCore(config: FlashAuthCoreConfig) {
           },
           async revokeToken(): Promise<void> {
             if (claims?.jti) {
-              await auth.revokeToken(claims.jti, claims.exp);
+              await auth.revokeToken(claims.jti, claims.exp ?? 0);
             }
           },
         },

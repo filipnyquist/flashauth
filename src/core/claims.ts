@@ -1,12 +1,17 @@
 /**
  * FlashAuth Claims
- * PASETO standard claims and permission helpers
+ * JWT standard claims and permission helpers
  */
 
 import { ValidationError } from './errors.js';
 
 /**
- * Standard PASETO claims
+ * Token type
+ */
+export type TokenType = 'access' | 'refresh' | 'api_key';
+
+/**
+ * Standard JWT claims
  */
 export interface StandardClaims {
   /** Issuer */
@@ -15,14 +20,16 @@ export interface StandardClaims {
   sub: string;
   /** Audience (services that can use this) */
   aud?: string[];
-  /** Expiration (Unix timestamp in seconds) - required */
-  exp: number;
+  /** Expiration (Unix timestamp in seconds) - optional for api_key tokens */
+  exp?: number;
   /** Issued at (Unix timestamp in seconds) */
   iat: number;
   /** Not before */
   nbf?: number;
   /** Unique token ID for revocation */
   jti?: string;
+  /** Token type */
+  type?: TokenType;
   /** User roles */
   roles?: string[];
   /** Explicit permissions (dot-notation) */
@@ -38,29 +45,31 @@ export class Claims implements StandardClaims {
   iss?: string;
   sub: string;
   aud?: string[];
-  exp: number;
+  exp?: number;
   iat: number;
   nbf?: number;
   jti?: string;
+  type?: TokenType;
   roles?: string[];
   perms?: string[];
   [key: string]: unknown;
 
   constructor(claims: StandardClaims) {
     this.sub = claims.sub;
-    this.exp = claims.exp;
     this.iat = claims.iat;
     
+    if (claims.exp !== undefined) this.exp = claims.exp;
     if (claims.iss) this.iss = claims.iss;
     if (claims.aud) this.aud = claims.aud;
     if (claims.nbf) this.nbf = claims.nbf;
     if (claims.jti) this.jti = claims.jti;
+    if (claims.type) this.type = claims.type;
     if (claims.roles) this.roles = claims.roles;
     if (claims.perms) this.perms = claims.perms;
 
     // Copy custom claims
     for (const [key, value] of Object.entries(claims)) {
-      if (!['iss', 'sub', 'aud', 'exp', 'iat', 'nbf', 'jti', 'roles', 'perms'].includes(key)) {
+      if (!['iss', 'sub', 'aud', 'exp', 'iat', 'nbf', 'jti', 'type', 'roles', 'perms'].includes(key)) {
         this[key] = value;
       }
     }
@@ -129,11 +138,14 @@ export class Claims implements StandardClaims {
     if (!claims.sub) {
       throw new ValidationError('Subject (sub) is required');
     }
-    if (!claims.exp) {
-      throw new ValidationError('Expiration (exp) is required');
-    }
-    if (typeof claims.exp !== 'number') {
-      throw new ValidationError('Expiration (exp) must be a number');
+    // exp is only required when type is not 'api_key'
+    if (claims.type !== 'api_key') {
+      if (claims.exp === undefined) {
+        throw new ValidationError('Expiration (exp) is required');
+      }
+      if (typeof claims.exp !== 'number') {
+        throw new ValidationError('Expiration (exp) must be a number');
+      }
     }
     if (!claims.iat) {
       throw new ValidationError('Issued at (iat) is required');
@@ -145,8 +157,10 @@ export class Claims implements StandardClaims {
 
   /**
    * Check if token is expired
+   * Returns false when no exp is set (e.g., API key tokens)
    */
   isExpired(clockSkew: number = 0): boolean {
+    if (this.exp === undefined) return false;
     const now = Math.floor(Date.now() / 1000);
     return this.exp < (now - clockSkew);
   }
