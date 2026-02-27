@@ -1,13 +1,5 @@
 /**
- * TOTP (2FA) secret model
+ * TOTP secret model - re-exports from Drizzle schema
  */
 
-export interface TOTPSecret {
-  id: string;
-  user_id: string;
-  secret: string;
-  backup_codes: string[];
-  enabled: boolean;
-  created_at: Date;
-  updated_at: Date;
-}
+export type { TotpSecret as TOTPSecret } from '../../../schema/index.js';

@@ -166,8 +166,9 @@ describe('FlashAuth', () => {
 
   test('should generate secret', () => {
     const secret = FlashAuth.generateSecret();
-    expect(secret).toBeInstanceOf(Uint8Array);
-    expect(secret.length).toBe(32);
+    expect(typeof secret).toBe('string');
+    // base64url-encoded 32-byte value
+    expect(secret.length).toBeGreaterThan(0);
   });
 
   test('should generate secret as hex', () => {

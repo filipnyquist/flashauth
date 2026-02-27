@@ -1,237 +1,205 @@
-# FlashAuth Implementation Summary
+# FlashAuth Implementation Details
 
-## Overview
-Successfully implemented FlashAuth, an ultra-fast PASETO v4 Local authentication framework for Bun.js and Elysia.js, meeting all core requirements from the specification.
+## Architecture Overview
 
-## Completed Features
+FlashAuth is a JWT authentication framework for Bun.js and Elysia.js, built around the `jose` library for HS256 token signing. The codebase is organized into core modules, token management, Elysia plugins, and database schema.
 
-### 1. PASETO v4 Local Implementation ✅
-- **Encryption**: XChaCha20-Poly1305 via [@noble/ciphers](https://github.com/paulmillr/noble-ciphers)
-- **Random Generation**: Bun's `crypto.getRandomValues`
-- **Token Format**: `v4.local.{payload}.{footer}`
-- **Pre-Authentication Encoding (PAE)**: Full PASETO v4 spec compliance
-- **Base64url Encoding**: RFC 4648 compliant
-
-### 2. Core Architecture ✅
-- **Error Hierarchy**: Custom error classes for precise error handling
-- **Claims Management**: Type-safe claims with validation
-- **Token Builder**: Fluent API for token creation
-- **Token Parser**: Secure validation and parsing
-- **Cryptography Module**: Secure key generation and operations
-
-### 3. Permission System ✅
-- **Dot-notation Permissions**: `resource:action` format
-- **Wildcard Support**: `posts:*`, `admin:*`, `*` (super admin)
-- **Permission Checks**: `hasPermission`, `hasAnyPermission`, `hasAllPermissions`
-- **Role-Based Access Control**: Role-to-permission mapping
-- **Role Checks**: `hasRole`, `hasAnyRole`
-- **Auto-expansion**: Roles automatically expand to permissions
-
-### 4. Token Management ✅
-- **Fluent Builder API**: Chainable token creation
-- **Duration Parsing**: Support for `15m`, `1h`, `7d`, `1w` formats
-- **Custom Claims**: Type-safe custom claim support
-- **Token Validation**: Comprehensive validation with options
-- **Clock Skew**: Configurable tolerance for time drift
-
-### 5. Revocation System ✅
-- **Per-Token Revocation**: Via JTI (token ID)
-- **Per-User Revocation**: Revoke all user tokens
-- **In-Memory Store**: Built-in revocation storage
-- **Pluggable Interface**: Support for custom stores (Redis, etc.)
-- **Auto-cleanup**: Expired revocations automatically removed
-- **Cache Invalidation**: Revoked tokens properly invalidated from cache
-
-### 6. Caching Layer ✅
-- **LRU Cache**: Configurable size and TTL
-- **Token Caching**: Validated tokens cached for performance
-- **Permission Caching**: Permission results cached within Claims
-- **Cache Stats**: Monitor cache usage
-- **Invalidation**: Proper cache invalidation on revocation
-
-### 7. Elysia.js Plugin ✅
-- **Native Integration**: First-class Elysia plugin
-- **Token Extraction**: Support for Bearer and Cookie tokens
-- **Context Injection**: `flashAuth` available in all route handlers
-- **Permission Guards**:
-  - `requireAuth()` - Require authentication
-  - `requirePermission(perm)` - Require specific permission
-  - `requireAnyPermission(perms)` - Require any of multiple permissions
-  - `requireAllPermissions(perms)` - Require all permissions
-  - `requireRole(role)` - Require specific role
-  - `requireAnyRole(roles)` - Require any role
-
-### 8. Security Features ✅
-- **Authenticated Encryption**: XChaCha20-Poly1305 (AEAD)
-- **No Algorithm Confusion**: Algorithm fixed by PASETO version
-- **Timing-Safe Comparison**: Prevents timing attacks
-- **Key Validation**: Ensures 32-byte keys
-- **Expiration Validation**: Required expiration timestamps
-- **Revocation Support**: Multiple revocation strategies
-
-### 9. Developer Experience ✅
-- **TypeScript**: Full type safety with strict mode
-- **Type Inference**: Automatic type inference for claims
-- **Inline Documentation**: Comprehensive JSDoc comments
-- **Error Messages**: Clear, actionable error messages
-- **Examples**: Working example application
-- **Comprehensive README**: Detailed API documentation
-
-### 10. Testing ✅
-- **44 Unit Tests**: All passing
-- **Test Coverage**:
-  - PASETO v4 Local operations
-  - Claims validation
-  - Permission matching and validation
-  - Token lifecycle (create, validate, revoke)
-  - Role-based access control
-  - Cache behavior
-  - Error handling
-
-## Technical Implementation
-
-### Dependencies
-```json
-{
-  "dependencies": {
-    "@noble/ciphers": "^2.1.1"
-  },
-  "peerDependencies": {
-    "elysia": "^1.0.0"
-  },
-  "devDependencies": {
-    "@types/bun": "^1.1.0",
-    "@types/node": "^20.10.0",
-    "elysia": "^1.4.18",
-    "typescript": "^5.3.3"
-  }
-}
+```
+src/
+├── core/
+│   ├── jwt.ts              # JWT creation/verification via jose (HS256)
+│   ├── claims.ts           # Claims class with permission/role helpers
+│   ├── cryptography.ts     # Secret key generation (32-byte random)
+│   └── errors.ts           # Error hierarchy (TokenError, PermissionError, etc.)
+├── tokens/
+│   ├── token-builder.ts    # Fluent API for token construction
+│   ├── token-parser.ts     # Token validation and claims extraction
+│   └── token-store.ts      # Revocation store + LRU cache
+├── plugins/
+│   ├── elysia-plugin.ts    # Lightweight plugin (context + macros)
+│   └── auth/
+│       ├── index.ts         # flashAuthCore + flashAuthRoutes exports
+│       ├── config.ts        # AuthPluginConfig interface + defaults
+│       ├── routes.ts        # All /auth/* route handlers
+│       ├── models/          # TypeScript types (User, TOTP, Passkey, etc.)
+│       ├── services/        # Business logic per feature
+│       └── utils/           # Helpers (password validation, etc.)
+├── schema/
+│   ├── index.ts             # Drizzle ORM schema (PostgreSQL)
+│   └── generate.ts          # CLI for schema generation (TS + SQL output)
+├── utils/
+│   └── permission-utils.ts  # Permission matching, role expansion, wildcards
+├── flashauth.ts             # Main FlashAuth class
+└── index.ts                 # Public API exports
 ```
 
-### File Structure
-```
-flashauth/
-├── src/
-│   ├── core/
-│   │   ├── claims.ts           # Claims structure and validation
-│   │   ├── cryptography.ts     # XChaCha20-Poly1305 operations
-│   │   ├── errors.ts           # Error hierarchy
-│   │   └── paseto.ts           # PASETO v4 implementation
-│   ├── tokens/
-│   │   ├── token-builder.ts    # Fluent API for token creation
-│   │   ├── token-parser.ts     # Token validation
-│   │   └── token-store.ts      # Revocation and caching
-│   ├── plugins/
-│   │   └── elysia-plugin.ts    # Elysia integration
-│   ├── utils/
-│   │   └── permission-utils.ts # Permission utilities
-│   ├── flashauth.ts            # Main FlashAuth class
-│   └── index.ts                # Public API exports
-├── tests/unit/
-│   ├── claims.test.ts          # Claims tests
-│   ├── flashauth.test.ts       # Integration tests
-│   ├── paseto.test.ts          # PASETO tests
-│   └── permissions.test.ts     # Permission tests
-├── examples/
-│   └── basic-app.ts            # Basic example
-└── dist/                       # Compiled TypeScript
-```
+## Core: JWT Implementation
 
-## Performance Characteristics
+- **Library**: `jose` v6 — a well-audited, zero-dependency JWT library.
+- **Algorithm**: HS256 (HMAC-SHA256) symmetric signing.
+- **Secret**: 32-byte random key, generated via `crypto.getRandomValues()`. Accepted as `string` (base64url or raw) or `Uint8Array`.
+- **Token format**: Standard JWT (`header.payload.signature`).
+- **Expiration handling**: `jose`'s built-in expiration check is bypassed (large clock tolerance); expiration is validated in `Claims` for consistent error types and API key support (no `exp` required).
 
-### Token Operations (Bun runtime)
-- Token Creation: Synchronous, <1ms
-- Token Validation: <1ms (first time), <0.1ms (cached)
-- Permission Check: <0.1ms (O(n) for wildcard matching)
-- Key Generation: <1ms
+### Token Creation Flow
 
-### Memory Usage
-- Base library: ~1MB
-- With 10k cached tokens: ~5MB
-- Per token cache entry: ~500 bytes
+1. `FlashAuth.createToken()` → returns a `TokenBuilder` instance
+2. Builder methods set claims (subject, roles, permissions, custom claims, etc.)
+3. `.build()` merges role permissions into the `perms` claim, validates required fields, and calls `jose.SignJWT.sign()`
 
-## Usage Example
+### Token Validation Flow
 
-```typescript
-import { Elysia } from 'elysia';
-import { FlashAuth, flashAuth, requirePermission } from 'flashauth';
+1. `FlashAuth.validateToken(token)` checks LRU cache first
+2. Cache miss → `jose.jwtVerify()` verifies signature and returns payload
+3. Claims are constructed and validated (expiration, nbf, audience, issuer)
+4. Revocation store is checked (per-token JTI and per-user)
+5. Valid claims are cached in the LRU store
 
-const auth = new FlashAuth({
-  secret: FlashAuth.generateSecret(),
-  rolePermissions: {
-    'user': ['posts:read', 'posts:write'],
-    'admin': ['*'],
-  },
-});
+## Permission System
 
-const app = new Elysia()
-  .use(flashAuth(auth))
-  .post('/login', async ({ body }) => {
-    const token = await auth
-      .createToken()
-      .subject('user:123')
-      .roles(['user'])
-      .expiresIn('1h')
-      .build();
-    return { token };
-  })
-  .use(requirePermission('posts:read'))
-  .get('/posts', ({ flashAuth }) => {
-    return { posts: [], user: flashAuth.claims?.sub };
-  })
-  .listen(3000);
-```
+- **Format**: `resource:action` (e.g., `posts:read`, `users:write`)
+- **Wildcards**: `resource:*` matches all actions on a resource; `*` matches everything
+- **Role expansion**: When a token is built with `.roles(['user'])`, the builder looks up `rolePermissions` and merges all resolved permissions into the `perms` claim
+- **Runtime checks**: `Claims.hasPermission()`, `hasAnyPermission()`, `hasAllPermissions()` perform matching at validation time
+- **Database-backed RBAC**: The auth routes plugin provides CRUD endpoints for roles, permissions, user-role assignments, and role-permission assignments stored in PostgreSQL via Drizzle
 
-## What's Not Implemented (Future Work)
+## Token Store & Caching
 
-### Advanced Features (Not Required for MVP)
-- [ ] Session persistence to database
-- [ ] Key rotation with zero-downtime
-- [ ] Audit logging with events
-- [ ] Multi-tenant support
-- [ ] Token refresh strategy
-- [ ] WebAuthn/Passkey support
-- [ ] MFA integration
-- [ ] Rate limiting
-- [ ] Admin dashboard
+### Revocation Store
 
-### Additional Testing
-- [ ] Integration tests with real Elysia server
-- [ ] Performance benchmarks
-- [ ] Security audit tests
-- [ ] Load testing
+Interface with two implementations:
 
-### Documentation Enhancements
-- [ ] More examples (RBAC, database integration, etc.)
-- [ ] API reference website
-- [ ] Video tutorials
-- [ ] Migration guides
+- **InMemoryRevocationStore** (default): `Map`-based storage with periodic cleanup of expired entries
+- **Custom**: Implement the `RevocationStore` interface for Redis, database-backed stores, etc.
 
-## Compliance with Specification
+Operations:
+- `revoke(jti, expiresAt)` — revoke a single token
+- `revokeUser(userId)` — revoke all tokens for a user
+- `isRevoked(jti)` / `isUserRevoked(userId)` — check revocation status
 
-### ✅ Core Requirements Met
-- [x] PASETO v4 Local token format
-- [x] XChaCha20-Poly1305 encryption
-- [x] Permission system with wildcards
-- [x] Role-based access control
-- [x] Elysia.js native plugin
-- [x] Type-safe claims
-- [x] Token revocation
-- [x] Sub-millisecond operations
-- [x] Pure TypeScript
-- [x] Bun runtime optimization
+### LRU Cache
 
-### 📊 Performance Targets
-- Token generation: ✅ <0.5ms (target: <0.5ms)
-- Token validation: ✅ <0.3ms cached (target: <0.3ms)
-- Permission check: ✅ <0.1ms (target: <0.1ms)
-- Memory footprint: ✅ <5MB (target: <5MB)
+- Enabled by default; configurable `maxSize` (default: 10,000) and `ttl` (default: 5 minutes)
+- Caches parsed `Claims` objects keyed by raw token string
+- Revocation checks always hit the store (never served from cache alone)
+- Invalidated on revocation
 
-## Conclusion
+## Elysia Plugins
 
-FlashAuth successfully implements the core specification for an ultra-fast, secure authentication framework for Bun.js and Elysia.js. All essential features are complete, tested, and documented. The framework is ready for production use with the understanding that some advanced features (key rotation, audit logging, etc.) can be added in future iterations.
+### `flashAuth(auth, config?)` — Lightweight
 
-**Test Results**: 44/44 tests passing ✅  
-**Build Status**: Successful ✅  
-**Example App**: Working ✅  
-**Documentation**: Complete ✅
+- Registers a `.derive()` that extracts tokens from bearer header or cookie
+- Validates token and exposes `flashAuth` context (claims, token, permission helpers, revoke)
+- Registers `.macro()` for `isAuth`, `requirePermission`, `requireAnyPermission`, `requireAllPermissions`, `requireRole`, `requireAnyRole`
+
+### `flashAuthCore(config)` — Core
+
+- Same as `flashAuth` but supports `tokenLocation: 'both'` (bearer first, cookie fallback)
+- Designed for use alongside `flashAuthRoutes` in apps that need both custom routes and auth endpoints
+
+### `flashAuthRoutes(config)` — Full Auth
+
+- Merges provided config with `DEFAULT_CONFIG`
+- Instantiates services: `UserService`, `VerificationService`, `PasswordResetService`, `TOTPService`, `PasskeyService`, `InviteService`, `PermissionService`, `ApiKeyService`
+- Mounts all `/auth/*` routes (see README for full list)
+
+## Database Schema (Drizzle ORM)
+
+PostgreSQL schema with 10 tables:
+
+| Table | Purpose |
+|-------|---------|
+| `users` | User accounts (email, password hash, email verified) |
+| `roles` | Named roles |
+| `permissions` | Named permissions (`resource:action`) |
+| `user_roles` | Join table: user ↔ role |
+| `role_permissions` | Join table: role ↔ permission |
+| `user_permissions` | Direct user ↔ permission assignments |
+| `invite_links` | Invite tokens with optional email, role, max uses, expiry |
+| `passkey_credentials` | WebAuthn credentials (credential ID, public key, counter) |
+| `api_keys` | Named API keys (hashed key, last used, optional expiry) |
+| `totp_secrets` | TOTP secrets and backup codes |
+
+All tables use UUID primary keys with `defaultRandom()`. Relations are defined for Drizzle's relational query API.
+
+### Schema Generation
+
+`src/schema/generate.ts` is a CLI that outputs:
+- **TypeScript**: Complete Drizzle schema file (default)
+- **SQL**: Raw `CREATE TABLE` statements (`--sql` flag)
+- **File output**: `--output <path>` writes to disk instead of stdout
+
+## Auth Services
+
+### UserService
+
+- `createUser(email, password)` — hashes password with `Bun.password.hash()` (bcrypt), inserts into `users` table
+- `authenticate(email, password)` — looks up user, verifies with `Bun.password.verify()`
+- `markEmailVerified(userId)` — sets `emailVerified = true`
+- `updatePassword(userId, newPassword)` — re-hashes and updates
+
+### VerificationService / PasswordResetService
+
+- Creates time-limited JWT tokens (24h for email verification, 1h for password reset)
+- Tokens are signed with the same FlashAuth secret
+- Verification: decodes token, checks expiration, extracts `userId`
+
+### TOTPService
+
+- Uses `otplib` for TOTP secret generation and verification
+- Generates QR code URL for authenticator apps
+- Manages backup codes (stored as JSON in `totp_secrets.backup_codes`)
+- `enableTOTP(userId, code)` verifies a code before enabling
+
+### PasskeyService
+
+- Uses `@simplewebauthn/server` for WebAuthn registration and authentication
+- Stores credentials in `passkey_credentials` table
+- Challenge storage is in-memory (`Map`) — in production, use Redis or similar
+
+### InviteService
+
+- Creates invite tokens with optional: target email, role assignment, max uses, expiry
+- `useInvite(token)` validates and increments use count
+- Used by `POST /auth/signup/invite`
+
+### ApiKeyService
+
+- Creates long-lived JWT tokens with `type: 'api_key'`
+- Stores key hash in `api_keys` table for management (list, delete)
+- Returns raw key only once at creation time
+
+### PermissionService
+
+- CRUD for roles and permissions in the database
+- Assign/remove roles to/from users
+- Assign/remove permissions to/from users (direct) and roles
+- `getUserPermissions(userId)` returns all permissions (via roles + direct assignments)
+
+## Error Handling
+
+Custom error hierarchy rooted at `FlashAuthError`:
+
+- `TokenError` — general token issues
+  - `TokenExpiredError` — token past expiration
+  - `TokenInvalidError` — signature/format invalid
+  - `TokenRevokedError` — token or user revoked
+- `PermissionError` — insufficient permissions or role
+- `SessionError` — session-related issues
+- `CryptographyError` — crypto operation failures
+- `KeyError` — invalid key
+- `ValidationError` — claim validation failures
+
+All errors have a `name` property matching the class name, for use in Elysia error handlers.
+
+## Testing
+
+44+ unit tests covering:
+- JWT creation and verification
+- Claims validation and permission checks
+- Token builder (fluent API, role expansion, api_key type)
+- Token revocation and caching
+- Error cases (expired, invalid, revoked tokens)
+- Permission utilities (matching, wildcards, merging)
+
+Run tests: `bun test`

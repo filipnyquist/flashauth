@@ -1,14 +1,15 @@
 /**
  * FlashAuth Main Class
- * Ultra-Fast PASETO v4 Local Authentication Framework
+ * JWT Authentication Framework
  */
 
 import { generateSecret } from './core/cryptography.js';
+import { base64urlEncode } from './core/jwt.js';
 import { TokenBuilder } from './tokens/token-builder.js';
 import { TokenParser } from './tokens/token-parser.js';
 import { InMemoryRevocationStore, TokenCache } from './tokens/token-store.js';
 import { Claims } from './core/claims.js';
-import { TokenExpiredError, TokenRevokedError, ValidationError } from './core/errors.js';
+import { TokenExpiredError, TokenRevokedError } from './core/errors.js';
 import type { ValidationOptions, StandardClaims } from './core/claims.js';
 import type { RevocationStore } from './tokens/token-store.js';
 import type { RolePermissions } from './utils/permission-utils.js';
@@ -17,7 +18,7 @@ import type { RolePermissions } from './utils/permission-utils.js';
  * FlashAuth configuration
  */
 export interface FlashAuthConfig {
-  /** Secret key for token encryption/decryption (32 bytes) */
+  /** Secret key for JWT signing/verification (string or Uint8Array) */
   secret: Uint8Array | string;
   /** Role to permissions mapping */
   rolePermissions?: RolePermissions;
@@ -36,37 +37,14 @@ export interface FlashAuthConfig {
  * FlashAuth main class
  */
 export class FlashAuth {
-  private key: Uint8Array;
+  private secret: string | Uint8Array;
   private rolePermissions: RolePermissions;
   private revocationStore: RevocationStore;
   private tokenCache?: TokenCache;
   private parser: TokenParser;
 
   constructor(config: FlashAuthConfig) {
-    // Parse secret key
-    if (typeof config.secret === 'string') {
-      // If string, assume it's base64 or hex encoded
-      if (config.secret.length === 64) {
-        // Hex encoded
-        this.key = new Uint8Array(
-          config.secret.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) ?? []
-        );
-      } else {
-        // Base64 encoded or raw string - convert to 32 bytes
-        const encoder = new TextEncoder();
-        const bytes = encoder.encode(config.secret);
-        if (bytes.length < 32) {
-          throw new ValidationError('Secret must be at least 32 bytes');
-        }
-        this.key = bytes.slice(0, 32);
-      }
-    } else {
-      this.key = config.secret;
-    }
-
-    if (this.key.length !== 32) {
-      throw new ValidationError('Secret key must be exactly 32 bytes');
-    }
+    this.secret = config.secret;
 
     this.rolePermissions = config.rolePermissions ?? {};
     this.revocationStore = config.revocationStore ?? new InMemoryRevocationStore();
@@ -75,14 +53,14 @@ export class FlashAuth {
       this.tokenCache = new TokenCache(config.cache);
     }
 
-    this.parser = new TokenParser(this.key);
+    this.parser = new TokenParser(this.secret);
   }
 
   /**
    * Create a new token builder
    */
   createToken(claims?: Partial<StandardClaims>): TokenBuilder {
-    const builder = new TokenBuilder(this.key, this.rolePermissions);
+    const builder = new TokenBuilder(this.secret, this.rolePermissions);
     
     if (claims) {
       if (claims.sub) builder.subject(claims.sub);
@@ -91,12 +69,13 @@ export class FlashAuth {
       if (claims.exp) builder.expiration(claims.exp);
       if (claims.nbf) builder.notBefore(claims.nbf);
       if (claims.jti) builder.tokenId(claims.jti);
+      if (claims.type) builder.type(claims.type);
       if (claims.roles) builder.roles(claims.roles);
       if (claims.perms) builder.permissions(claims.perms);
       
       // Copy custom claims
       for (const [key, value] of Object.entries(claims)) {
-        if (!['sub', 'iss', 'aud', 'exp', 'iat', 'nbf', 'jti', 'roles', 'perms'].includes(key)) {
+        if (!['sub', 'iss', 'aud', 'exp', 'iat', 'nbf', 'jti', 'type', 'roles', 'perms'].includes(key)) {
           builder.claim(key, value);
         }
       }
@@ -183,10 +162,11 @@ export class FlashAuth {
   }
 
   /**
-   * Generate a new secret key
+   * Generate a new secret key as a base64url-encoded string
    */
-  static generateSecret(): Uint8Array {
-    return generateSecret();
+  static generateSecret(): string {
+    const bytes = generateSecret();
+    return base64urlEncode(bytes);
   }
 
   /**

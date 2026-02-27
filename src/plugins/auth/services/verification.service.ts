@@ -1,85 +1,55 @@
 /**
- * Email verification service
+ * Email verification service using JWT tokens
  */
 
-import type { DatabaseConnection } from '../utils/db.js';
-import type { EmailVerificationToken } from '../models/verification.model.js';
 import type { AuthPluginConfig } from '../config.js';
-import { generateVerificationToken } from '../utils/tokens.js';
 
 export class VerificationService {
-  private db: DatabaseConnection;
   private config: AuthPluginConfig;
 
-  constructor(db: DatabaseConnection, config: AuthPluginConfig) {
-    this.db = db;
+  constructor(config: AuthPluginConfig) {
     this.config = config;
   }
 
   /**
-   * Create a verification token for a user
+   * Create a verification token for a user (JWT-based)
    */
   async createVerificationToken(userId: string): Promise<string> {
-    const token = generateVerificationToken();
     const expirationSeconds = this.config.tokenExpiration?.emailVerification || 24 * 60 * 60;
-    const expiresAt = new Date(Date.now() + expirationSeconds * 1000);
-
-    const sql = `
-      INSERT INTO email_verification_tokens (user_id, token, expires_at)
-      VALUES ($1, $2, $3)
-      RETURNING *
-    `;
-
-    await this.db.queryOne<EmailVerificationToken>(sql, [userId, token, expiresAt]);
-    return token;
+    return await this.config.flashAuth
+      .createToken()
+      .subject(userId)
+      .claim('purpose', 'email_verification')
+      .expiresIn(`${expirationSeconds}s`)
+      .build();
   }
 
   /**
    * Verify an email verification token
    */
   async verifyToken(token: string): Promise<{ valid: boolean; userId?: string; error?: string }> {
-    const sql = `
-      SELECT * FROM email_verification_tokens
-      WHERE token = $1
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
-
-    const tokenRecord = await this.db.queryOne<EmailVerificationToken>(sql, [token]);
-
-    if (!tokenRecord) {
-      return { valid: false, error: 'Invalid verification token' };
+    try {
+      const claims = await this.config.flashAuth.validateToken(token);
+      if (claims['purpose'] !== 'email_verification') {
+        return { valid: false, error: 'Invalid token type' };
+      }
+      return { valid: true, userId: claims.sub };
+    } catch {
+      return { valid: false, error: 'Invalid or expired verification token' };
     }
-
-    // Check if token has expired
-    if (new Date() > new Date(tokenRecord.expires_at)) {
-      return { valid: false, error: 'Verification token has expired' };
-    }
-
-    return { valid: true, userId: tokenRecord.user_id };
   }
 
   /**
-   * Delete verification token after use
+   * Delete verification token after use (no-op for JWT)
    */
-  async deleteToken(token: string): Promise<void> {
-    const sql = 'DELETE FROM email_verification_tokens WHERE token = $1';
-    await this.db.execute(sql, [token]);
+  async deleteToken(_token: string): Promise<void> {
+    // No-op: JWT tokens are stateless
   }
 
   /**
-   * Delete all verification tokens for a user
+   * Delete all verification tokens for a user (no-op for JWT)
    */
-  async deleteUserTokens(userId: string): Promise<void> {
-    const sql = 'DELETE FROM email_verification_tokens WHERE user_id = $1';
-    await this.db.execute(sql, [userId]);
-  }
-
-  /**
-   * Clean up expired tokens
-   */
-  async cleanupExpiredTokens(): Promise<void> {
-    const sql = 'DELETE FROM email_verification_tokens WHERE expires_at < $1';
-    await this.db.execute(sql, [new Date()]);
+  async deleteUserTokens(_userId: string): Promise<void> {
+    // No-op: JWT tokens are stateless
   }
 }

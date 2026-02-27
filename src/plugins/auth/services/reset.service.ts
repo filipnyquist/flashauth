@@ -1,85 +1,55 @@
 /**
- * Password reset service
+ * Password reset service using JWT tokens
  */
 
-import type { DatabaseConnection } from '../utils/db.js';
-import type { PasswordResetToken } from '../models/reset.model.js';
 import type { AuthPluginConfig } from '../config.js';
-import { generatePasswordResetToken } from '../utils/tokens.js';
 
 export class PasswordResetService {
-  private db: DatabaseConnection;
   private config: AuthPluginConfig;
 
-  constructor(db: DatabaseConnection, config: AuthPluginConfig) {
-    this.db = db;
+  constructor(config: AuthPluginConfig) {
     this.config = config;
   }
 
   /**
-   * Create a password reset token for a user
+   * Create a password reset token for a user (JWT-based)
    */
   async createResetToken(userId: string): Promise<string> {
-    const token = generatePasswordResetToken();
     const expirationSeconds = this.config.tokenExpiration?.passwordReset || 60 * 60;
-    const expiresAt = new Date(Date.now() + expirationSeconds * 1000);
-
-    const sql = `
-      INSERT INTO password_reset_tokens (user_id, token, expires_at)
-      VALUES ($1, $2, $3)
-      RETURNING *
-    `;
-
-    await this.db.queryOne<PasswordResetToken>(sql, [userId, token, expiresAt]);
-    return token;
+    return await this.config.flashAuth
+      .createToken()
+      .subject(userId)
+      .claim('purpose', 'password_reset')
+      .expiresIn(`${expirationSeconds}s`)
+      .build();
   }
 
   /**
    * Verify a password reset token
    */
   async verifyToken(token: string): Promise<{ valid: boolean; userId?: string; error?: string }> {
-    const sql = `
-      SELECT * FROM password_reset_tokens
-      WHERE token = $1
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
-
-    const tokenRecord = await this.db.queryOne<PasswordResetToken>(sql, [token]);
-
-    if (!tokenRecord) {
-      return { valid: false, error: 'Invalid reset token' };
+    try {
+      const claims = await this.config.flashAuth.validateToken(token);
+      if (claims['purpose'] !== 'password_reset') {
+        return { valid: false, error: 'Invalid token type' };
+      }
+      return { valid: true, userId: claims.sub };
+    } catch {
+      return { valid: false, error: 'Invalid or expired reset token' };
     }
-
-    // Check if token has expired
-    if (new Date() > new Date(tokenRecord.expires_at)) {
-      return { valid: false, error: 'Reset token has expired' };
-    }
-
-    return { valid: true, userId: tokenRecord.user_id };
   }
 
   /**
-   * Delete reset token after use
+   * Delete reset token after use (no-op for JWT)
    */
-  async deleteToken(token: string): Promise<void> {
-    const sql = 'DELETE FROM password_reset_tokens WHERE token = $1';
-    await this.db.execute(sql, [token]);
+  async deleteToken(_token: string): Promise<void> {
+    // No-op: JWT tokens are stateless
   }
 
   /**
-   * Delete all reset tokens for a user
+   * Delete all reset tokens for a user (no-op for JWT)
    */
-  async deleteUserTokens(userId: string): Promise<void> {
-    const sql = 'DELETE FROM password_reset_tokens WHERE user_id = $1';
-    await this.db.execute(sql, [userId]);
-  }
-
-  /**
-   * Clean up expired tokens
-   */
-  async cleanupExpiredTokens(): Promise<void> {
-    const sql = 'DELETE FROM password_reset_tokens WHERE expires_at < $1';
-    await this.db.execute(sql, [new Date()]);
+  async deleteUserTokens(_userId: string): Promise<void> {
+    // No-op: JWT tokens are stateless
   }
 }

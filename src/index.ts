@@ -1,5 +1,5 @@
 /**
- * FlashAuth - Ultra-Fast PASETO v4 Local Authentication Framework
+ * FlashAuth - JWT Authentication Framework for Bun.js & Elysia.js
  * @module flashauth
  */
 
@@ -9,7 +9,7 @@ export type { FlashAuthConfig } from './flashauth.js';
 
 // Core types
 export { Claims } from './core/claims.js';
-export type { StandardClaims, ValidationOptions } from './core/claims.js';
+export type { StandardClaims, ValidationOptions, TokenType } from './core/claims.js';
 
 // Token builder
 export { TokenBuilder } from './tokens/token-builder.js';
@@ -66,8 +66,11 @@ export {
 // Cryptography (for advanced usage)
 export { generateSecret } from './core/cryptography.js';
 
-// PASETO utilities (for advanced usage)
-export { base64urlEncode, base64urlDecode } from './core/paseto.js';
+// JWT utilities (for advanced usage)
+export { base64urlEncode, base64urlDecode } from './core/jwt.js';
+
+// OpenTelemetry trace plugin
+export { flashAuthTrace, type FlashAuthTraceConfig } from './plugins/trace.js';
 
 // Authentication plugins
 // flashAuthCore: lightweight plugin with context & macros only (use in sub-routes)
@@ -75,7 +78,6 @@ export { base64urlEncode, base64urlDecode } from './core/paseto.js';
 export {
   flashAuthCore,
   flashAuthRoutes,
-  runMigrations,
   type FlashAuthCoreConfig,
   type AuthPluginConfig,
   type FlashAuthContext,

@@ -107,7 +107,7 @@ export function flashAuth(
           },
           async revokeToken(): Promise<void> {
             if (claims?.jti) {
-              await auth.revokeToken(claims.jti, claims.exp);
+              await auth.revokeToken(claims.jti, claims.exp ?? 0);
             }
           },
         },

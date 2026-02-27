@@ -9,7 +9,14 @@
     "typescript": "^5.3.3"
   },
   "peerDependencies": {
+    "@elysiajs/opentelemetry": "^1.4.10",
+    "drizzle-orm": "^0.45.1",
     "elysia": "^1.4.18"
+  },
+  "peerDependenciesMeta": {
+    "@elysiajs/opentelemetry": {
+      "optional": true
+    }
   },
   "exports": {
     ".": {
@@ -17,19 +24,22 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "description": "Ultra-Fast PASETO v4 Local Authentication Framework for Bun.js and Elysia.js",
+  "description": "Ultra-Fast JWT Authentication Framework for Bun.js and Elysia.js",
   "engines": {
     "bun": ">=1.1.0"
   },
   "keywords": [
     "authentication",
-    "paseto",
+    "jwt",
     "elysia",
     "bun",
     "security",
-    "jwt-alternative",
-    "permissions",
-    "session",
+    "drizzle",
+    "roles",
+    "passkey",
+    "webauthn",
+    "api-key",
+    "opentelemetry",
     "token"
   ],
   "license": "MIT",
@@ -39,14 +49,15 @@
     "test:watch": "bun test --watch",
     "benchmark": "bun run benchmarks/token-operations.ts",
     "benchmark:server": "bun run benchmarks/benchmark-server.ts",
+    "generate-schema": "bun run src/schema/generate.ts",
     "dev": "bun run --watch examples/basic-app.ts",
     "lint": "tsc --noEmit"
   },
   "type": "module",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@noble/ciphers": "^2.1.1",
     "@simplewebauthn/server": "^13.2.2",
+    "jose": "^6.1.3",
     "otplib": "^12.0.1"
   }
 }
